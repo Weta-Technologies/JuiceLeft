@@ -2,7 +2,7 @@
 
 _Last updated: 26 September 2026_
 
-"JuiceLeft" and the JuiceLeft logo (the "Marks") are trademarks of CyborgFingers. They identify the official JuiceLeft app, so
+"JuiceLeft" and the JuiceLeft logo (the "Marks") are trademarks of Weta Technologies Limited. They identify the official JuiceLeft app, so
 people can trust that what they download is the real thing.
 
 ## You may
@@ -17,7 +17,7 @@ people can trust that what they download is the real thing.
 - Use the Marks, or anything confusingly similar, as or in the name, logo, icon, website or domain of other software,
   apps, services or products.
 - Modify, animate, combine or distort the logo.
-- Suggest that CyborgFingers sponsors, endorses or is affiliated with you or your product.
+- Suggest that Weta Technologies sponsors, endorses or is affiliated with you or your product.
 - Distribute JuiceLeft, or anything calling itself JuiceLeft, from anywhere other than the official page.
 
 ## Other trademarks

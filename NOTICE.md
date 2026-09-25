@@ -1,6 +1,6 @@
 # JuiceLeft — Notices and Acknowledgements
 
-JuiceLeft is copyright (c) 2026 CyborgFingers. All rights reserved. See LICENSE.
+JuiceLeft is copyright (c) 2026 Weta Technologies Limited. All rights reserved. Developed by Weta Technologies Limited (GitHub: CyborgFingers). See LICENSE.
 
 ## Acknowledgements
 

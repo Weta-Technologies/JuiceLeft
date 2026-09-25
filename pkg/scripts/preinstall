@@ -1,0 +1,22 @@
+#!/bin/sh
+# JuiceLeft preinstall — Installer runs it as root before the app is copied in. Quits a running JuiceLeft the way the
+# app expects: a quit event sent from the logged-in user's session (so Apple's battery item comes back and the charging
+# light is handed back — a plain kill would skip both), then waits for it to go. A copy that ignores the request for
+# ten seconds is killed. Env overrides exist only for test-pkg.sh.
+set -u
+APP_NAME=JuiceLeft
+BUNDLE_ID=io.github.cyborgfingers.juiceleft
+tries="${PKG_QUIT_TRIES:-50}"
+pgrep -x "$APP_NAME" >/dev/null || exit 0
+user=$(stat -f %Su /dev/console 2>/dev/null || true)
+case "$user" in
+  ""|root|loginwindow|_mbsetupuser) ;;
+  *) launchctl asuser "$(id -u "$user")" sudo -u "$user" osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true ;;
+esac
+i=0
+while pgrep -x "$APP_NAME" >/dev/null; do
+  i=$((i + 1))
+  [ "$i" -lt "$tries" ] || { pkill -x "$APP_NAME"; break; }
+  sleep 0.2
+done
+exit 0

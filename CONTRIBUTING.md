@@ -10,5 +10,5 @@ Thanks for your interest in JuiceLeft!
 
 ## Feedback
 
-If you send suggestions, ideas or other feedback, you agree that CyborgFingers may use them freely, without any
+If you send suggestions, ideas or other feedback, you agree that Weta Technologies may use them freely, without any
 obligation, payment or credit to you.

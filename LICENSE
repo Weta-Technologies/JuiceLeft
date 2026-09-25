@@ -1,21 +1,22 @@
 JUICELEFT FREEWARE LICENCE AGREEMENT
 
-JuiceLeft is copyright (c) 2026 CyborgFingers. All rights reserved.
-Licence version 1.1 — 26 September 2026.
+JuiceLeft is copyright (c) 2026 Weta Technologies Limited. All rights reserved.
+Developed by Weta Technologies Limited · GitHub: CyborgFingers (https://github.com/CyborgFingers).
+Licence version 1.2 — 26 September 2026.
 
-This agreement is between you and CyborgFingers (https://github.com/CyborgFingers), the author and owner of JuiceLeft,
-a menu-bar battery monitor. It covers the JuiceLeft application, its installer, helper tools, source code, artwork, documentation and
-website (together, the "Software"). By downloading, installing or using the Software you agree to this agreement. If
-you do not agree, do not download, install or use the Software.
+This agreement is between you and Weta Technologies Limited, the owner of JuiceLeft, a menu-bar battery monitor. It
+covers the JuiceLeft application, its installer, helper tools, source code, artwork, documentation and website
+(together, the "Software"). By downloading, installing or using the Software you agree to this agreement. If you do
+not agree, do not download, install or use the Software.
 
-"CyborgFingers" is the name under which the author of JuiceLeft publishes software; in this agreement it means the
-author and any person or company that later owns the Software.
+In this agreement, "Weta Technologies" means Weta Technologies Limited, a New Zealand company, and any person or
+company that later owns the Software. Official builds are code-signed and notarized by Weta Technologies Limited.
 
 1. LICENCE TO USE
-CyborgFingers grants you a personal, worldwide, royalty-free, non-exclusive, non-transferable and revocable licence to
-download, install and use the Software free of charge on any Mac computers you own or control, for personal or business
-purposes, including by building it for your own use from the official, unmodified source code, subject to this
-agreement.
+Weta Technologies grants you a personal, worldwide, royalty-free, non-exclusive, non-transferable and revocable
+licence to download, install and use the Software free of charge on any Mac computers you own or control, for personal
+or business purposes, including by building it for your own use from the official, unmodified source code, subject to
+this agreement.
 
 2. RESTRICTIONS
 Except as expressly permitted in section 1, you must not, and must not allow anyone else to:
@@ -26,8 +27,8 @@ Except as expressly permitted in section 1, you must not, and must not allow any
       available to anyone else, including by bundling it with other software or services (share the official download
       link instead);
   (d) remove, alter or obscure any copyright, trademark or other notice in the Software;
-  (e) use the Software, or its name or logo, to build, promote or train a competing product, or to suggest that
-      CyborgFingers endorses you or your product; or
+  (e) use the Software, or its name or logo, to build, promote or train a competing product, or to suggest that Weta
+      Technologies endorses you or your product; or
   (f) use the Software in breach of any law.
 
 3. SOURCE CODE
@@ -36,14 +37,23 @@ including through features such as forking that GitHub's Terms of Service allow,
 agreement, and you may not use any part of it in other software.
 
 4. OWNERSHIP
-The Software is licensed, not sold. CyborgFingers owns all right, title and interest in the Software, including all
-copyright, trademarks and other intellectual property rights. All rights not expressly granted are reserved.
+The Software is licensed, not sold. Weta Technologies owns all right, title and interest in the Software, including
+all copyright, trademarks and other intellectual property rights. All rights not expressly granted are reserved.
 
 5. TRADEMARKS
-"JuiceLeft" and the JuiceLeft logo are trademarks of CyborgFingers; see TRADEMARKS.md. Apple, Mac, macOS, MagSafe and Apple Intelligence are trademarks of Apple Inc., registered in the U.S. and other countries and regions. JuiceLeft is not affiliated with, sponsored by or endorsed by Apple Inc. Other product and company names mentioned are trademarks of their respective owners.
+"JuiceLeft" and the JuiceLeft logo are trademarks of Weta Technologies Limited; see TRADEMARKS.md. Apple, Mac, macOS,
+MagSafe and Apple Intelligence are trademarks of Apple Inc., registered in the U.S. and other countries and regions.
+JuiceLeft is not affiliated with, sponsored by or endorsed by Apple Inc. Other product and company names mentioned are
+trademarks of their respective owners.
 
 6. CHANGES TO YOUR MAC
-At your request the Software reads battery and power information; replaces the macOS battery menu-bar item (hiding Apple's and restoring it when you quit or turn the option off); can change energy modes and Apple's charge limit, adjust screen and keyboard brightness and control the MagSafe charging light; quits other apps when you click their Quit button; and plays alert sounds. Energy modes and the charging light use a helper that runs with administrator privileges, installed only after you approve an administrator prompt. Battery forecasts, accuracy figures and savings estimates are estimates only and may be wrong — don't rely on them where running out of battery could cause harm or loss. You can undo these changes as described in the README's Uninstall section.
+At your request the Software reads battery and power information; replaces the macOS battery menu-bar item (hiding
+Apple's and restoring it when you quit or turn the option off); can change energy modes and Apple's charge limit,
+adjust screen and keyboard brightness and control the MagSafe charging light; quits other apps when you click their
+Quit button; and plays alert sounds. Energy modes and the charging light use a helper that runs with administrator
+privileges, installed only after you approve an administrator prompt. Battery forecasts, accuracy figures and savings
+estimates are estimates only and may be wrong — don't rely on them where running out of battery could cause harm or
+loss. You can undo these changes as described in the README's Uninstall section.
 
 7. PRIVACY
 The Software does not collect, transmit, share or sell personal information. Its only network activity is checking
@@ -51,30 +61,30 @@ GitHub for updates and, when you choose to update, downloading them; you can tur
 PRIVACY.md.
 
 8. UPDATES AND SUPPORT
-CyborgFingers may release updates, change or remove features, or stop offering the Software at any time, and has no
-obligation to provide support, maintenance or updates. The Software can check for, download and install updates when
-you ask it to; each update is provided under the licence agreement current at its release, which you accept by
+Weta Technologies may release updates, change or remove features, or stop offering the Software at any time, and has
+no obligation to provide support, maintenance or updates. The Software can check for, download and install updates
+when you ask it to; each update is provided under the licence agreement current at its release, which you accept by
 installing it.
 
 9. PAID VERSIONS AND PRICING
-This agreement covers the versions and features of the Software that CyborgFingers makes available free of charge.
-CyborgFingers may offer the Software, future versions or editions, or additional features for a fee or by
+This agreement covers the versions and features of the Software that Weta Technologies makes available free of charge.
+Weta Technologies may offer the Software, future versions or editions, or additional features for a fee or by
 subscription, and may change which versions or features are free. Paid versions and features are licensed under
 separate terms presented at the time of purchase, and nothing in this agreement entitles you to them without paying.
 You may keep using any version you received free of charge under the terms that came with it.
 
 10. NO WARRANTY
-THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
-LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY AND NONINFRINGEMENT.
-CYBORGFINGERS DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE OR UNINTERRUPTED, OR THAT IT WILL PROTECT YOUR
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY AND NONINFRINGEMENT. WETA
+TECHNOLOGIES DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE OR UNINTERRUPTED, OR THAT IT WILL PROTECT YOUR
 BATTERY, HARDWARE OR DATA.
 
 11. LIMITATION OF LIABILITY
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL CYBORGFINGERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
-CONSEQUENTIAL OR EXEMPLARY DAMAGES, OR FOR ANY LOSS OF DATA, BATTERY CAPACITY OR LIFE, DAMAGE TO HARDWARE, OR LOSS OF
-PROFITS, REVENUE OR GOODWILL, ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS AGREEMENT, HOWEVER CAUSED AND
-UNDER ANY THEORY OF LIABILITY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. CYBORGFINGERS' TOTAL LIABILITY FOR ALL
-CLAIMS RELATING TO THE SOFTWARE SHALL NOT EXCEED NZ$50.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL WETA TECHNOLOGIES BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
+SPECIAL, CONSEQUENTIAL OR EXEMPLARY DAMAGES, OR FOR ANY LOSS OF DATA, BATTERY CAPACITY OR LIFE, DAMAGE TO HARDWARE, OR
+LOSS OF PROFITS, REVENUE OR GOODWILL, ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS AGREEMENT, HOWEVER
+CAUSED AND UNDER ANY THEORY OF LIABILITY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. WETA TECHNOLOGIES' TOTAL
+LIABILITY FOR ALL CLAIMS RELATING TO THE SOFTWARE SHALL NOT EXCEED NZ$50.
 
 12. YOUR CONSUMER RIGHTS
 The laws of some countries give consumers rights that cannot be excluded or limited by contract. Nothing in this
@@ -83,7 +93,7 @@ business, you agree that the Consumer Guarantees Act 1993 (New Zealand) does not
 section 43 of that Act.
 
 13. INDEMNITY
-You agree to indemnify CyborgFingers against any claim, loss, liability or cost arising from your breach of this
+You agree to indemnify Weta Technologies against any claim, loss, liability or cost arising from your breach of this
 agreement or your misuse of the Software.
 
 14. TERMINATION
@@ -98,24 +108,26 @@ This agreement is governed by the laws of New Zealand, and the courts of New Zea
 over any dispute arising out of or in connection with it.
 
 17. CHANGES TO THIS AGREEMENT
-CyborgFingers may update this agreement at any time. The current version is always published at
+Weta Technologies may update this agreement at any time. The current version is always published at
 https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE, and each release of the Software includes the version in
 force when it was released. Updated terms apply to versions released after they are published and, where applicable
 law allows, to your continued use of earlier versions 30 days after publication. An update will never take away your
-right to keep using, free of charge, a version you received free of charge. If you do not accept an update, stop
-using the Software.
+right to keep using, free of charge, a version you received free of charge. If you do not accept an update, stop using
+the Software.
 
 18. GENERAL
 If any provision of this agreement is found unenforceable, it will be enforced to the maximum extent permissible and
-the rest of the agreement will remain in effect. A failure or delay in enforcing any provision is not a waiver. You may
-not assign or transfer this agreement; CyborgFingers may. This agreement is the entire agreement between you and
-CyborgFingers about the Software and supersedes any earlier terms for this version.
+the rest of the agreement will remain in effect. A failure or delay in enforcing any provision is not a waiver. You
+may not assign or transfer this agreement; Weta Technologies may. This agreement is the entire agreement between you
+and Weta Technologies about the Software and supersedes any earlier terms for this version.
 
 19. EARLIER VERSIONS
-JuiceLeft 1.0.0 and the source published before 26 September 2026 were distributed under the GNU Affero General Public License v3.0. Anyone who received that version keeps the rights that licence gave for it. This agreement applies to every later version.
+JuiceLeft 1.0.0 and the source published before 26 September 2026 were distributed under the GNU Affero General Public
+License v3.0. Anyone who received that version keeps the rights that licence gave for it. This agreement applies to
+every later version.
 
 20. CONTACT
 Questions about this agreement: open an issue at https://github.com/CyborgFingers/JuiceLeft/issues
 Security reports: see SECURITY.md.
 
-Last updated: 26 September 2026.
+Last updated: 26 September 2026. 

@@ -1,0 +1,5 @@
+JuiceLeft is in your menu bar, where Apple's battery icon was — the percent, the battery, and the time left after it. (If you use Bartender, Ice or a similar menu-bar organiser, it may be tucked away in there.)
+
+Click the item for the panel: the forecast and how accurate it has been, Save Battery, tips with one-click fixes, alerts, the apps using the most power, battery health and charging care. Press and hold the item to turn monitoring on or off. The helper is set up, so energy modes, Smart Low Power and the charging light are ready — no more password prompts. JuiceLeft will ask once whether it may post notifications.
+
+JuiceLeft checks for updates about once a day and offers them in the panel; you can turn that off there. It is free, from Weta Technologies Limited (GitHub: CyborgFingers); the licence you accepted is also at github.com/CyborgFingers/JuiceLeft.

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.dmg"><img alt="Download JuiceLeft for Mac" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?style=for-the-badge&label=Download%20for%20Mac&color=FFB23E"></a>
+  <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg"><img alt="Download JuiceLeft for Mac" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?style=for-the-badge&label=Download%20for%20Mac&color=FFB23E"></a>
   <br>
   <sub>macOS 13+ · Apple Silicon · free · made by <a href="https://github.com/CyborgFingers">CyborgFingers</a></sub>
 </p>
@@ -94,7 +94,7 @@ Tips are detected only while the panel is open, from the same facts: brightness,
 
 ### Energy modes and the helper
 
-Energy modes are `pmset -b|-c powermode 0|1|2` (Automatic, Low Power, High Power, per power source), and only root can set them. Reading is free (`pmset -g custom`), so the panel always shows the real state, re-read once a minute while it is open. Setting goes through [`juiceleft-helper.sh`](juiceleft-helper.sh), installed from the panel's one-time setup card (or a *Set up…* button beside the energy-mode picker and the charging light): a single macOS authorization prompt, your password or Touch ID, that installs everything JuiceLeft will ever need as root. From then on nothing asks again — a new version's helper files are installed by the helper itself, and only when they carry a manifest signed with the CyborgFingers publisher key (see [Updates](#updates)). Until it is set up, energy modes, Smart Low Power and the charging light simply stay off:
+Energy modes are `pmset -b|-c powermode 0|1|2` (Automatic, Low Power, High Power, per power source), and only root can set them. Reading is free (`pmset -g custom`), so the panel always shows the real state, re-read once a minute while it is open. Setting goes through [`juiceleft-helper.sh`](juiceleft-helper.sh). The Installer package installs it under its own admin prompt, so it is there before the menu-bar item first appears; a copy built from source gets the panel's one-time setup card (or a *Set up…* button beside the energy-mode picker and the charging light) instead — either way a single macOS authorization prompt, your password or Touch ID, installs everything JuiceLeft will ever need as root. From then on nothing asks again — a new version's helper files are installed by the helper itself, and only when they carry a manifest signed with the CyborgFingers publisher key (see [Updates](#updates)). Until it is set up, energy modes, Smart Low Power and the charging light simply stay off:
 
 1. The app writes one line — `b 1` (battery, low power), `c 0` (adapter, automatic), … — to `/Library/Application Support/JuiceLeft/powermode`, a file owned by you in a root-owned folder.
 2. launchd runs the helper on every write; it reads the first line and runs the matching `pmset`. **Nothing but exactly `b|c` × `0|1|2` ever reaches `pmset`**; anything else is ignored, as is a symlinked request file.
@@ -132,13 +132,10 @@ The one-line summary under the panel header is always generated from JuiceLeft's
 
 ### Download (easiest)
 
-1. **[Download JuiceLeft.dmg](https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.dmg)** — always the latest release ([all releases](https://github.com/CyborgFingers/JuiceLeft/releases)).
-2. Open it and drag **JuiceLeft** into **Applications**.
-3. Open JuiceLeft from Applications. It isn't notarized by Apple yet, so the first launch needs one extra step:
-   - **macOS 15 Sequoia or later:** macOS says it can't verify the app — click **Done**, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to JuiceLeft.
-   - **macOS 13–14:** right-click (or ⌃-click) JuiceLeft in Applications, choose **Open**, then **Open** again.
+1. **[Download JuiceLeft.pkg](https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg)** — always the latest release ([all releases](https://github.com/CyborgFingers/JuiceLeft/releases)).
+2. Open it: **Continue**, **Agree** to the licence, **Install**. macOS asks for your password or Touch ID **once**: that puts JuiceLeft into Applications and sets up its helper, and JuiceLeft opens in your menu bar — in Apple's battery spot — with energy modes and the charging light ready. Nothing asks again — not the app, and not later updates.
 
-   You only do this once. Requires an Apple Silicon Mac with a battery running macOS 13 or later.
+   The package and the app are Developer ID signed and notarized by Apple (the official builds are signed and notarized by Weta Technologies Limited — see [SECURITY.md](SECURITY.md) for how to check a download), so there is no Gatekeeper step and the app opens without a warning. Requires an Apple Silicon Mac with a battery running macOS 13 or later. Running the package again over an installed JuiceLeft (or a newer one) simply upgrades it; your settings and what it has learned are kept. (The 1.0 release was an unsigned drag-to-Applications DMG: if you still have that one, macOS 15 and later make you allow it under *System Settings → Privacy & Security → Open Anyway* — the package replaces it, and does not.)
 
 ### Build from source
 
@@ -150,7 +147,7 @@ cd JuiceLeft
 ./build.sh install   # builds build/JuiceLeft.app, copies it to /Applications and launches it
 ```
 
-`./build.sh` on its own just builds `build/JuiceLeft.app`. The app is ad-hoc signed; because you build it on your own Mac there is no download quarantine and no Gatekeeper prompt. `./make-dmg.sh` builds the drag-to-Applications installer (`build/JuiceLeft.dmg`) that is attached to each release.
+`./build.sh` on its own just builds `build/JuiceLeft.app`. The app is ad-hoc signed; because you build it on your own Mac there is no download quarantine and no Gatekeeper prompt. `./make-pkg.sh` builds the Installer package (`build/JuiceLeft.pkg`) that is attached to each release: the app, the licence pane, and pre/post-install scripts ([`pkg/`](pkg/)) that quit a running copy properly (so Apple's battery item comes back), hand the app to the logged-in user, install the helper for them and open the app.
 
 ## First run
 
@@ -158,7 +155,7 @@ cd JuiceLeft
 - Running from Applications, it registers itself as a **login item** on first launch (macOS may show a "background items added" notification). Untick *Launch at login* in the panel if you would rather not.
 - It asks once whether it may post **notifications**. Say no and the red pulse and the tone still work; only the notification switches, the heat guard's notification and the charging-care notices do nothing.
 - The forecast needs a few minutes of discharge before it has an opinion (*Estimating…* until then), and a couple of full discharges before it can tell you how accurate it is.
-- The panel opens with a **one-time setup** card for the helper behind energy modes and the charging light: **Set up now** brings one macOS prompt — your password, or Touch ID on Macs that have it — and nothing asks again. **Later** leaves those features off (each with its own *Set up…* button; *Smart Low Power* waits too, and says so under its switch) until you are ready. A *Reinstall helper…* link at the bottom of the panel is there if the helper is ever removed.
+- Installed with the package, the helper behind energy modes and the charging light is already set up — the installer's prompt was the one. Built from source, the panel opens with a **one-time setup** card instead: **Set up now** brings one macOS prompt — your password, or Touch ID on Macs that have it — and nothing asks again; **Later** leaves those features off (each with its own *Set up…* button; *Smart Low Power* waits too, and says so under its switch) until you are ready. A *Reinstall helper…* link at the bottom of the panel is there if the helper is ever removed.
 - On a Mac that could run **Apple Intelligence** but has it turned off, the panel also offers one line — *Turn on Apple Intelligence for plain-English battery tips* — with **Open Settings** (System Settings › Apple Intelligence & Siri) and **Not now**. JuiceLeft starts phrasing its summary line with it as soon as it is on; Macs that can't run it, and macOS before 26, never see the line.
 - If you use **Bartender**, **Ice** or a similar menu-bar organiser, or your menu bar is crowded next to the notch, the item may be hidden — look for it there.
 
@@ -191,19 +188,20 @@ JuiceLeft checks GitHub for a newer release about 10 seconds after launch and th
 
 **Update Now** downloads `JuiceLeft.app.zip` from the release and checks its **Ed25519 signature** against the CyborgFingers publisher key built into the app — a download that doesn't verify is never unpacked. It then unpacks the zip beside the app, checks that the new bundle really is JuiceLeft at the advertised, newer version with a valid code signature, and hands over to a tiny script that waits for JuiceLeft to quit, swaps the two bundles with two renames (the old one is put back if anything fails) and relaunches. JuiceLeft quits normally, so Apple's battery item and the charging light are handed back first and taken over again by the new version. It all takes a couple of seconds. **Later** hides the card until the next check; **Skip** ignores that version.
 
-Your settings (`~/Library/Preferences/io.github.cyborgfingers.juiceleft.plist`) and the learner's history (`~/Library/Application Support/JuiceLeft/`) live outside the app, so they survive, and so does *Launch at login*. If the update changes the helper, the installed helper takes the new files by itself: they come with a manifest signed with the same publisher key, which the root-owned helper verifies (signature, every file's hash, no downgrade) before installing anything, so there is no new prompt. If JuiceLeft can't replace itself where it is — running from the DMG, say, or from a folder you can't write to — the card says so and offers the download page instead.
+Your settings (`~/Library/Preferences/io.github.cyborgfingers.juiceleft.plist`) and the learner's history (`~/Library/Application Support/JuiceLeft/`) live outside the app, so they survive, and so does *Launch at login*. If the update changes the helper, the installed helper takes the new files by itself: they come with a manifest signed with the same publisher key, which the root-owned helper verifies (signature, every file's hash, no downgrade) before installing anything, so there is no new prompt. If JuiceLeft can't replace itself where it is — in a folder you can't write to, say — the card says so and offers the download page instead (the package installs over the old version too).
 
 ## Uninstall
 
-Quit JuiceLeft — that puts Apple's battery icon back. Then, **only if you ever set an energy mode** (or used Save Battery), remove the helper:
+Quit JuiceLeft — that puts Apple's battery icon back. Then remove the helper (installed by the package, or by the panel's setup) and, if you installed with the package, its receipt:
 
 ```bash
 sudo /bin/sh /Applications/JuiceLeft.app/Contents/Resources/juiceleft-helper.sh uninstall
+sudo pkgutil --forget io.github.cyborgfingers.juiceleft.pkg
 ```
 
-and move `/Applications/JuiceLeft.app` to the Trash. If you built from source, `./build.sh uninstall` does all three. The helper's files are:
+and move `/Applications/JuiceLeft.app` to the Trash. If you built from source, `./build.sh uninstall` does all of it. The helper's files are:
 
-- `/Library/PrivilegedHelperTools/io.github.cyborgfingers.juiceleft.power.sh`
+- `/Library/PrivilegedHelperTools/io.github.cyborgfingers.juiceleft.power.sh` (and `.led`, `.verify`, `.pub`, `.manifest` beside it)
 - `/Library/LaunchDaemons/io.github.cyborgfingers.juiceleft.power.plist`
 - `/Library/Application Support/JuiceLeft/`
 
@@ -260,9 +258,9 @@ JuiceLeft is an independent implementation with no code or artwork copied from a
 
 ## License
 
-**JuiceLeft is copyright © 2026 [CyborgFingers](https://github.com/CyborgFingers). All rights reserved.**
+**JuiceLeft is copyright © 2026 Weta Technologies Limited. All rights reserved. Developed by Weta Technologies Limited · GitHub: [CyborgFingers](https://github.com/CyborgFingers).**
 
-JuiceLeft is **freeware**: you may download and use it free of charge on any Macs you own or control, for personal or business use. You may not modify, decompile, redistribute, sell or host it; please share the [official download](https://github.com/CyborgFingers/JuiceLeft/releases/latest) instead. The source is published so you can see exactly what JuiceLeft does. It is not open source, and viewing it gives no rights beyond the licence. The DMG asks you to accept the licence before it opens.
+JuiceLeft is **freeware**: you may download and use it free of charge on any Macs you own or control, for personal or business use. You may not modify, decompile, redistribute, sell or host it; please share the [official download](https://github.com/CyborgFingers/JuiceLeft/releases/latest) instead. The source is published so you can see exactly what JuiceLeft does. It is not open source, and viewing it gives no rights beyond the licence. The installer asks you to accept the licence before installing.
 
 - [Licence agreement](LICENSE) (governed by New Zealand law)
 - [Privacy policy](PRIVACY.md): JuiceLeft collects nothing, and its Apple Intelligence tips run on your Mac

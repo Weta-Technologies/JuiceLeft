@@ -1,0 +1,23 @@
+#!/bin/sh
+# JuiceLeft postinstall — Installer runs it as root once the app is in place; Installer's own admin prompt (password or
+# Touch ID) is the one prompt there will ever be. It hands the app to the user who is logged in (so the app can update
+# itself in place later), installs the root helper for energy modes and the charging light for that user through the
+# same installer the app's own Set up button uses, and opens the app in their session. Nothing here fails the install:
+# if the helper step goes wrong, the app's setup card offers it again. Output lands in /var/log/install.log.
+# Installer passes: $1 package path, $2 install location, $3 target volume, $4 root. Env overrides exist only for test-pkg.sh.
+set -u
+APP="${PKG_APP:-${2:-/Applications}/JuiceLeft.app}"
+say() { echo "JuiceLeft postinstall: $*"; }
+user=$(stat -f %Su /dev/console 2>/dev/null || true)
+case "$user" in
+  ""|root|loginwindow|_mbsetupuser) say "no user logged in at the console; the app will offer its one-time setup"; exit 0 ;;
+esac
+uid=$(id -u "$user" 2>/dev/null) || { say "unknown console user $user; the app will offer its one-time setup"; exit 0; }
+chown -R "$user:staff" "$APP" || say "couldn't hand the app to $user (in-app updates may need a manual download)"
+if /bin/sh "$APP/Contents/Resources/juiceleft-helper.sh" install "$user"; then
+  say "helper installed for $user"
+else
+  say "helper install failed; the app will offer its one-time setup"
+fi
+launchctl asuser "$uid" sudo -u "$user" open -a "$APP" || say "couldn't open the app; open it from Applications"
+exit 0

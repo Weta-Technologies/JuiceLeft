@@ -1,0 +1,7 @@
+JuiceLeft puts the time until your Mac goes flat in the menu bar — in Apple's own battery spot, with Apple's own look — and stretches that time.
+
+This installer puts JuiceLeft into your Applications folder and sets up its helper: the small root job that energy modes and the charging light need. macOS asks for your password (or Touch ID) once, at the Install step. Nothing will ask again — later versions update themselves, signed, from inside the app.
+
+JuiceLeft then opens in your menu bar, taking the place of Apple's battery icon (quit it and Apple's comes back). It runs on Apple Silicon Macs with a battery and macOS 13 or later. If JuiceLeft is already running, it is quit and replaced; your settings and everything it has learned are kept.
+
+Developed by Weta Technologies Limited · GitHub: CyborgFingers.

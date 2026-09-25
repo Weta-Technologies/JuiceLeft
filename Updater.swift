@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import Security
 import SwiftUI
 import UserNotifications
 
@@ -13,7 +14,8 @@ import UserNotifications
 ///
 /// Update Now: download the zip, check its Ed25519 signature against the publisher key below, unzip it with ditto
 /// into a hidden folder beside the app, sanity-check the new bundle (same bundle id, the advertised newer version,
-/// `codesign --verify`), then hand over to a small detached script that waits for this process to exit, swaps the
+/// `codesign --verify`, and — when this app is Developer ID signed — the same developer's signature, checked against
+/// this app's own designated requirement), then hand over to a small detached script that waits for this process to exit, swaps the
 /// bundles with two renames (the old one goes back if anything fails) and relaunches. The app quits normally, so
 /// its own clean-ups run; settings live outside the bundle, so they survive. Anything that fails shows a message
 /// and the download page. Nothing from the download ever runs except the verified, checked app.
@@ -256,7 +258,7 @@ import UserNotifications
             try? FileManager.default.removeItem(at: stage)
             try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
             let new = try Self.unzip(zip, into: stage, expecting: "\(appName).app")
-            if let why = Self.sanityCheck(new, bundleID: bundleID, version: release.version, current: currentVersion) { throw Failure(why) }
+            if let why = Self.sanityCheck(new, bundleID: bundleID, version: release.version, current: currentVersion, requirement: Self.ownRequirement) { throw Failure(why) }
             log("staged \(new.path)")
             try handOff(new)
         } catch {
@@ -290,8 +292,8 @@ import UserNotifications
     }
 
     /// nil when the unpacked bundle is what it claims to be: this bundle id, the advertised (newer) version, a
-    /// signature that verifies.
-    nonisolated static func sanityCheck(_ app: URL, bundleID: String, version: Version, current: Version) -> String? {
+    /// signature that verifies, and — given a requirement — one made by the same developer as this app.
+    nonisolated static func sanityCheck(_ app: URL, bundleID: String, version: Version, current: Version, requirement: SecRequirement?) -> String? {
         guard let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist")) as? [String: Any] else { return "the new app has no Info.plist" }
         guard info["CFBundleIdentifier"] as? String == bundleID else { return "the new app has a different bundle identifier" }
         let found = info["CFBundleShortVersionString"] as? String ?? "?"
@@ -299,7 +301,31 @@ import UserNotifications
         guard let exe = info["CFBundleExecutable"] as? String,
               FileManager.default.isExecutableFile(atPath: app.appendingPathComponent("Contents/MacOS/\(exe)").path) else { return "the new app has no executable" }
         guard run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]) else { return "the new app's code signature doesn't verify" }
+        if let requirement, !satisfies(app, requirement) { return "the new app isn't signed by the same developer as this one" }
         return nil
+    }
+
+    /// This app's designated requirement when it carries a team identity (Developer ID), so an update must be signed by
+    /// the same developer as well as by the publisher key. nil for ad-hoc builds, whose requirement only ever matches
+    /// themselves.
+    nonisolated static var ownRequirement: SecRequirement? {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let team = (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty else { return nil }
+        var requirement: SecRequirement?
+        guard SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess else { return nil }
+        return requirement
+    }
+
+    /// The bundle's signature is valid and meets `requirement`.
+    nonisolated static func satisfies(_ app: URL, _ requirement: SecRequirement) -> Bool {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(app as CFURL, [], &staticCode) == errSecSuccess, let staticCode else { return false }
+        return SecStaticCodeCheckValidity(staticCode, [], requirement) == errSecSuccess
     }
 
     nonisolated private static func run(_ tool: String, _ args: [String]) -> Bool {
@@ -468,6 +494,24 @@ import UserNotifications
         let tidy = { (try? files.contentsOfDirectory(atPath: apps.path)) == ["Fake.app"] }
         check(swap(new: stage.appendingPathComponent("Fake.app").path) == 0 && installed() == "2" && !files.fileExists(atPath: stage.path) && tidy(), "swap installs the new bundle and cleans up")
         check(swap(new: dir.appendingPathComponent("missing/Fake.app").path) == 1 && installed() == "2" && tidy(), "a failed swap puts the old bundle back")
+        // Signature requirements on a fake ad-hoc-signed bundle: it meets a requirement naming its own identifier, not
+        // another's, and never a Developer ID shape; this app meets its own requirement whenever it has one.
+        let signed = dir.appendingPathComponent("Signed.app")
+        try! files.createDirectory(at: signed.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+        try! files.copyItem(atPath: "/bin/ls", toPath: signed.appendingPathComponent("Contents/MacOS/Signed").path)
+        try! (["CFBundleIdentifier": "io.github.cyborgfingers.fake", "CFBundleExecutable": "Signed", "CFBundlePackageType": "APPL"] as NSDictionary)
+            .write(to: signed.appendingPathComponent("Contents/Info.plist"))
+        check(run("/usr/bin/codesign", ["--force", "--sign", "-", signed.path]), "a fake bundle signs")
+        func requirement(_ text: String) -> SecRequirement {
+            var r: SecRequirement?
+            SecRequirementCreateWithString(text as CFString, [], &r)
+            return r!
+        }
+        check(satisfies(signed, requirement("identifier \"io.github.cyborgfingers.fake\"")), "a bundle meets its own identifier requirement")
+        check(!satisfies(signed, requirement("identifier \"io.github.cyborgfingers.other\"")), "…and not another's")
+        check(!satisfies(signed, requirement("anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"")), "an ad-hoc bundle never passes for a Developer ID one")
+        check(sanityCheck(signed, bundleID: "io.github.cyborgfingers.fake", version: Version("0")!, current: Version("0")!, requirement: nil)?.contains("version") == true, "sanity check reads the fake bundle")
+        if let own = ownRequirement { check(satisfies(Bundle.main.bundleURL, own), "this app meets its own designated requirement") }
         try? files.removeItem(at: dir)
         check(installBlocker(URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/y/d/Fake.app"))?.contains("Move it into Applications") == true
               && installBlocker(URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")) != nil, "unwritable places are refused")

@@ -23,16 +23,18 @@ fail() { echo "FAIL: $*"; [[ -f "$W/log.txt" ]] && sed 's/^/     /' "$W/log.txt"
 PUB=$(build/sign-update testkey "$W/key")
 OTHER=$(build/sign-update testkey "$W/otherkey")
 
-# The "new version": this build with its version set to 9.9.9, re-signed (the Info.plist is covered by the signature).
+# The "new version": this build with its version set to 9.9.9, re-signed with the same identity as the build (the
+# Info.plist is covered by the signature, and a Developer ID build only accepts updates from the same developer).
+SIGN_APP=${CF_SIGN_APP:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application:/ {print $2; exit}')}
 mkdir -p "$W/new" "$W/site"
 cp -R "build/$APP.app" "$W/new/"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 9.9.9" "$W/new/$APP.app/Contents/Info.plist"
-codesign --force --sign - "$W/new/$APP.app" 2>/dev/null
+codesign --force --sign "${SIGN_APP:--}" --options runtime "$W/new/$APP.app" 2>/dev/null
 ditto -c -k --keepParent "$W/new/$APP.app" "$W/site/$APP.app.zip"
 build/sign-update sign "$W/site/$APP.app.zip" --key-file "$W/key/private.key" >/dev/null
 cat > "$W/site/latest.json" <<EOF
 {"tag_name":"v9.9.9","draft":false,"prerelease":false,"html_url":"http://127.0.0.1:$PORT/notes","body":"## Test release\\n- the updater works",
- "assets":[{"name":"$APP.dmg","browser_download_url":"http://127.0.0.1:$PORT/$APP.dmg"},
+ "assets":[{"name":"$APP.pkg","browser_download_url":"http://127.0.0.1:$PORT/$APP.pkg"},
            {"name":"$APP.app.zip","browser_download_url":"http://127.0.0.1:$PORT/$APP.app.zip"},
            {"name":"$APP.app.zip.sig","browser_download_url":"http://127.0.0.1:$PORT/$APP.app.zip.sig"}]}
 EOF
@@ -66,7 +68,18 @@ fresh_copy
 grep -q "signature doesn't match" "$W/log.txt" && [[ $(version) == "$ORIG" ]] || fail "wrong key: expected a signature refusal and $ORIG"
 echo "ok   refused, copy still $ORIG"
 
-echo "3. a tampered download"
+if [[ -n "$SIGN_APP" ]]; then
+  echo "3. a properly publisher-signed update whose app is signed by another developer (ad hoc)"
+  codesign --force --sign - --options runtime "$W/new/$APP.app" 2>/dev/null
+  ditto -c -k --keepParent "$W/new/$APP.app" "$W/site/$APP.app.zip"
+  build/sign-update sign "$W/site/$APP.app.zip" --key-file "$W/key/private.key" >/dev/null
+  fresh_copy
+  ! run "$PUB" >/dev/null 2>&1 || fail "an update from another developer was accepted"
+  grep -q "same developer" "$W/log.txt" && [[ $(version) == "$ORIG" ]] && [[ $(ls -A "$W/Apps") == "$APP.app" ]] || fail "other developer: expected a same-developer refusal and $ORIG"
+  echo "ok   refused after the publisher-key check, copy still $ORIG, nothing staged"
+fi
+
+echo "4. a tampered download"
 printf '\0' >> "$W/site/$APP.app.zip"    # one byte: the signature no longer matches
 fresh_copy
 ! run "$PUB" >/dev/null 2>&1 || fail "a tampered zip was accepted"

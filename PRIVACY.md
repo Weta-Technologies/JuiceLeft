@@ -2,13 +2,15 @@
 
 _Last updated: 26 September 2026_
 
-JuiceLeft is made by [CyborgFingers](https://github.com/CyborgFingers). In short: **JuiceLeft collects nothing.**
+JuiceLeft is developed and published by Weta Technologies Limited ([CyborgFingers on GitHub](https://github.com/CyborgFingers)). In short: **JuiceLeft collects nothing.**
 
 - No accounts, analytics, tracking, advertising or crash reporting.
 - The only network activity is **checking for updates**: JuiceLeft asks GitHub for its latest release (a standard web
   request, like visiting the releases page — no account, no identifiers, nothing about you or your Mac beyond what any
   web request carries), and downloads an update only when you click **Update Now**. You can turn update checks off in
-  the app's settings. Updates are verified with CyborgFingers' signing key before they are installed. Its optional Apple Intelligence tips are generated entirely on your Mac by Apple's on-device model; nothing leaves your Mac.
+  the app's settings. Updates are verified with the publisher's update-signing key before they are installed. Its optional Apple Intelligence tips are generated entirely on your Mac by Apple's on-device model; nothing leaves your Mac.
+- When you first open it, macOS itself may check the app's notarization with Apple. That check is made by macOS, not
+  by JuiceLeft, and is covered by Apple's privacy policy.
 - Links you click (for example to GitHub) open in your web browser.
 - Nothing is sold, rented or shared — there is nothing to share.
 

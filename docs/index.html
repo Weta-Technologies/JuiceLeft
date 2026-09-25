@@ -128,10 +128,10 @@
       <p class="tag">Know exactly how much juice is left.</p>
       <p class="sub">The time until flat, in Apple's own battery spot — and everything that makes it later. Free, for macOS 13+ on Apple Silicon.</p>
       <div class="btns">
-        <a class="btn" href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.dmg">⬇︎ Download for Mac</a>
+        <a class="btn" href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg">⬇︎ Download for Mac</a>
         <a class="btn ghost" href="https://github.com/CyborgFingers/JuiceLeft">View on GitHub</a>
       </div>
-      <p class="dl-meta">Version 1.1.0 · DMG · macOS 13+ on Apple Silicon · <a href="#install">install help</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/releases">all releases</a></p>
+      <p class="dl-meta">Version 1.1.0 · .pkg installer · macOS 13+ on Apple Silicon · <a href="#install">install help</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/releases">all releases</a></p>
       <div class="badges"><span>By <a href="https://github.com/CyborgFingers">CyborgFingers</a></span><span>Swift &amp; SwiftUI</span><span>Freeware · all rights reserved</span><span>No analytics · signed updates</span></div>
     </div>
   </div>
@@ -217,14 +217,12 @@
 <section id="install">
   <div class="wrap">
     <h2>Download &amp; install</h2>
-    <p class="lead">Grab the installer, drag JuiceLeft into Applications, and you're done.</p>
-    <p><a class="btn" href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.dmg">⬇︎ Download JuiceLeft.dmg</a></p>
+    <p class="lead">Download the installer and open it: Continue, Agree, Install — one password (or Touch ID), and JuiceLeft is in your menu bar with everything set up.</p>
+    <p><a class="btn" href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg">⬇︎ Download JuiceLeft.pkg</a></p>
     <ol class="muted">
-      <li>Open the DMG and drag <strong>JuiceLeft</strong> into <strong>Applications</strong>.</li>
-      <li>Open JuiceLeft from Applications. It isn't notarized by Apple yet, so the first launch needs one extra step:
-        <strong>macOS 15 or later</strong> — when macOS says it can't verify the app, click <em>Done</em>, open <em>System Settings → Privacy &amp; Security</em>, scroll down and click <em>Open Anyway</em>;
-        <strong>macOS 13–14</strong> — right-click JuiceLeft, choose <em>Open</em>, then <em>Open</em> again. Only the first time.</li>
-      <li>Apple's battery icon disappears and JuiceLeft's item takes its spot, with the time left after it. It asks once whether it may post notifications; say no and the pulse and the tone still work. The panel offers a one-time setup for the helper behind energy modes and the charging light — your password or Touch ID, once; it then updates itself from signed files, and JuiceLeft checks GitHub for updates about once a day and installs them from the panel.</li>
+      <li>Open the package. It is Developer ID signed and notarized by Apple (the official builds are signed and notarized by Weta Technologies Limited), so there is no Gatekeeper step — and the app it installs opens without a warning.</li>
+      <li><strong>Continue</strong>, <strong>Agree</strong> to the licence, <strong>Install</strong>. macOS asks for your password or Touch ID once: JuiceLeft goes into Applications, its helper for energy modes and the charging light is set up, and JuiceLeft opens in the menu bar. Nothing asks again — later updates arrive signed, from inside the app.</li>
+      <li>Apple's battery icon disappears and JuiceLeft's item takes its spot, with the time left after it. It asks once whether it may post notifications; say no and the pulse and the tone still work.</li>
     </ol>
     <h3 style="margin-top: 28px">Or build it from source</h3>
     <p class="muted">A few seconds with Xcode or the Command Line Tools (<code>xcode-select --install</code>):</p>
@@ -242,7 +240,7 @@ cd JuiceLeft
 
 <footer>
   <div class="wrap">
-    <span>Made by <a href="https://github.com/CyborgFingers">CyborgFingers</a> · © 2026 · All rights reserved · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE">Licence</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/PRIVACY.md">Privacy</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/TRADEMARKS.md">Trademarks</a> · v1.1.0</span>
+    <span>Made by <a href="https://github.com/CyborgFingers">CyborgFingers</a> · © 2026 Weta Technologies Limited · All rights reserved · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE">Licence</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/PRIVACY.md">Privacy</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/blob/main/TRADEMARKS.md">Trademarks</a> · v1.1.0</span>
     <span>Independent implementation — no code or artwork copied.</span>
     <span><a href="https://github.com/CyborgFingers/JuiceLeft">Source on GitHub</a></span>
   </div>
