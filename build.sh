@@ -1,0 +1,33 @@
+#!/bin/bash
+# ./build.sh            -> build/JuiceLeft.app
+# ./build.sh install    -> also copy to /Applications and launch
+# ./build.sh uninstall  -> quit and remove the app
+set -euo pipefail
+cd "$(dirname "$0")"
+
+if [[ "${1:-}" == "uninstall" ]]; then
+  pkill -x JuiceLeft || true
+  rm -rf /Applications/JuiceLeft.app
+  echo "Removed. Also untick JuiceLeft in System Settings > General > Login Items if it's still listed."
+  exit 0
+fi
+
+APP=build/JuiceLeft.app
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Info.plist "$APP/Contents/"
+[[ -f assets/AppIcon.icns ]] && cp assets/AppIcon.icns "$APP/Contents/Resources/"
+# FoundationModels (Apple Intelligence, macOS 26+) is weak-linked so the app still launches on macOS 13–15.
+swiftc -O -parse-as-library -target arm64-apple-macosx13.0 \
+  -Xlinker -weak_framework -Xlinker FoundationModels \
+  *.swift -o "$APP/Contents/MacOS/JuiceLeft"
+codesign --force --sign - "$APP"
+echo "Built $APP"
+
+if [[ "${1:-}" == "install" ]]; then
+  pkill -x JuiceLeft || true
+  rm -rf /Applications/JuiceLeft.app
+  cp -R "$APP" /Applications/
+  open /Applications/JuiceLeft.app
+  echo "Installed + launched /Applications/JuiceLeft.app"
+fi
