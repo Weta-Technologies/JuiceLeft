@@ -52,7 +52,7 @@ ctx.draw(icon, in: CGRect(x: 96, y: 108, width: 424, height: 424))
 // Wordmark + tagline.
 text("JuiceLeft", rounded(132, weight: .bold), srgb(0xFFFFFF), at: CGPoint(x: 536, y: 318), tracking: -3)
 text("Know exactly how much juice is left.", rounded(36, weight: .medium), srgb(0xB9F26A), at: CGPoint(x: 544, y: 254))
-text("Free, open-source battery monitor for the macOS menu bar", rounded(25, weight: .regular), srgb(0xA9D6CF), at: CGPoint(x: 546, y: 206))
+text("Free battery monitor for the macOS menu bar · by CyborgFingers", rounded(25, weight: .regular), srgb(0xA9D6CF), at: CGPoint(x: 546, y: 206))
 
 let out = assets.appendingPathComponent("banner.png")
 let dest = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil)!

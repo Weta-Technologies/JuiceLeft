@@ -7,13 +7,13 @@
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-1C7A73">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-FFB23E">
   <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?color=1C7A73&label=release"></a>
-  <a href="LICENSE"><img alt="AGPL-3.0 license" src="https://img.shields.io/badge/license-AGPL--3.0-B9F26A"></a>
+  <a href="LICENSE"><img alt="Freeware, all rights reserved" src="https://img.shields.io/badge/license-freeware%20%C2%B7%20all%20rights%20reserved-B9F26A"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.dmg"><img alt="Download JuiceLeft for Mac" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?style=for-the-badge&label=Download%20for%20Mac&color=FFB23E"></a>
   <br>
-  <sub>macOS 13+ · Apple Silicon · free & open source · made by <a href="https://github.com/CyborgFingers">CyborgFingers</a></sub>
+  <sub>macOS 13+ · Apple Silicon · free · made by <a href="https://github.com/CyborgFingers">CyborgFingers</a></sub>
 </p>
 
 **JuiceLeft** puts the time until your Mac goes flat in the menu bar — in the exact spot, and the exact look, of Apple's own battery icon — and stretches that time. Its forecast learns from its own misses and tells you how accurate it has been. It pulses red when the battery gets low and plays a tone when it gets lower. One **Save Battery** click buys you hours; tips with one-click fixes show what is costing you power; and it can set Apple's own charge limit, switch to Low Power Mode by itself, cap the screen on battery, watch the pack's temperature and coach your charging habits. No root for any of that except the energy modes, which go through a tiny helper you approve once.
@@ -242,4 +242,14 @@ JuiceLeft is an independent implementation with no code or artwork copied from a
 
 ## License
 
-JuiceLeft is made by **[CyborgFingers](https://github.com/CyborgFingers)** and released under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). © 2026 CyborgFingers.
+**JuiceLeft is copyright © 2026 [CyborgFingers](https://github.com/CyborgFingers). All rights reserved.**
+
+JuiceLeft is **freeware**: you may download and use it free of charge on any Macs you own or control, for personal or business use. You may not modify, decompile, redistribute, sell or host it; please share the [official download](https://github.com/CyborgFingers/JuiceLeft/releases/latest) instead. The source is published so you can see exactly what JuiceLeft does. It is not open source, and viewing it gives no rights beyond the licence. The DMG asks you to accept the licence before it opens.
+
+- [Licence agreement](LICENSE) (governed by New Zealand law)
+- [Privacy policy](PRIVACY.md): JuiceLeft collects nothing, and its Apple Intelligence tips run on your Mac
+- [Trademark policy](TRADEMARKS.md) · [Security policy](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Notices](NOTICE.md)
+
+JuiceLeft 1.0.0 and the source published before 26 September 2026 were released under the GNU AGPL-3.0; copies of that version keep that licence.
+
+Apple, Mac, macOS, MagSafe and Apple Intelligence are trademarks of Apple Inc. JuiceLeft is not affiliated with or endorsed by Apple Inc.

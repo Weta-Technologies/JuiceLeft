@@ -83,6 +83,9 @@ struct Panel: View {
                 Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · by")
                 Link("CyborgFingers", destination: URL(string: "https://github.com/CyborgFingers")!)
                     .help("github.com/CyborgFingers — source, releases and issues at github.com/CyborgFingers/JuiceLeft")
+                Text("· © 2026 · All rights reserved ·")
+                Link("Licence", destination: URL(string: "https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE")!)
+                    .help("The JuiceLeft licence agreement and privacy policy (JuiceLeft collects nothing).")
             }
             .font(.caption)
             .foregroundStyle(.secondary)

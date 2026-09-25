@@ -57,5 +57,8 @@ DEV=""
 
 rm -f build/JuiceLeft.dmg
 hdiutil convert "$WORK/rw.dmg" -quiet -format ULFO -o build/JuiceLeft.dmg
+# The licence agreement macOS shows (Agree / Disagree) before the DMG opens.
+python3 assets/make-sla.py LICENSE "$WORK/sla.xml"
+hdiutil udifrez -xml "$WORK/sla.xml" '' -quiet build/JuiceLeft.dmg
 echo "Built build/JuiceLeft.dmg (JuiceLeft $VERSION)"
 shasum -a 256 build/JuiceLeft.dmg
