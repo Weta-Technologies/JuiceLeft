@@ -128,6 +128,7 @@ import SwiftUI
 
 struct HoverCardView: View {
     @ObservedObject var monitor: Monitor
+    @ObservedObject var updater = Updater.shared   // the menu-bar item stays Apple's; an update shows here and in the panel
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
@@ -136,6 +137,10 @@ struct HoverCardView: View {
             Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
             Text(detail).font(.caption).lineLimit(1)
                 .foregroundStyle(warning ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+            if let release = updater.available {
+                Label("JuiceLeft \(release.version.description) is available — click for details", systemImage: "arrow.down.circle")
+                    .font(.caption).foregroundStyle(Color.accentColor).lineLimit(1)
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)

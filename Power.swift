@@ -226,14 +226,13 @@ enum PowerMode {
             && FileManager.default.isWritableFile(atPath: requestPath)
     }
 
-    /// One admin prompt. Returns an error message, or nil on success.
-    static func installHelper() -> String? {
-        let quote = { (s: String) in s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
-        let script = "do shell script \"/bin/sh \" & quoted form of \"\(quote(bundledPath))\" & \" install \" & quoted form of \"\(quote(NSUserName()))\" with administrator privileges"
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
-        if let error { return error[NSAppleScript.errorMessage] as? String ?? "Helper install failed." }
-        return helperReady ? nil : "Helper install didn't complete."
+    /// Some version of the helper is installed (so a signed self-update is possible when it isn't this one).
+    static var helperInstalled: Bool { FileManager.default.fileExists(atPath: installedPath) }
+
+    /// The one admin prompt (password or Touch ID): installs everything JuiceLeft ever needs as root.
+    static func installHelper() -> Admin.Outcome {
+        let outcome = Admin.run(bundledPath, ["install", NSUserName()], prompt: "JuiceLeft needs to install its helper for energy modes and the charging light. This is the only time it will ask.")
+        return outcome == .done && !helperReady ? .failed("The helper didn't install.") : outcome
     }
 
     /// The request line the helper accepts: exactly "b 0" … "c 2".

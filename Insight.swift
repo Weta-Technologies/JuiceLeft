@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// The plain-English line under the panel header. Facts in, one sentence out: a template always, and — when Apple
 /// Intelligence is on (macOS 26+) — the on-device model rephrasing the same facts, checked so it never invents a
@@ -19,8 +19,17 @@ import Foundation
     @Published private(set) var fromAI = false
     private var signature = ""
     private var generation = 0
+    private var lastFacts: Facts?
+
+    /// Apple Intelligence was turned on since the last sentence: phrase the current facts with it now.
+    func retryAI(ai: Bool) {
+        guard ai, !fromAI, let f = lastFacts, AppleIntelligence.available else { return }
+        signature = ""
+        update(f, ai: true)
+    }
 
     func update(_ f: Facts, ai: Bool) {
+        lastFacts = f
         let signature = Self.signature(f)
         guard signature != self.signature else { return }
         self.signature = signature
@@ -71,11 +80,28 @@ import Foundation
 /// The on-device model, reached only on macOS 26+ with Apple Intelligence turned on; everywhere else these are no-ops
 /// and the template sentence stands. FoundationModels is weak-linked (see build.sh).
 enum AppleIntelligence {
-    static var available: Bool {
+    /// What the system model says: on, off on a Mac that could run it, a Mac that can't, still downloading, or no
+    /// FoundationModels at all (macOS 13–15).
+    enum Status: Equatable { case available, notEnabled, notEligible, notReady, unsupported }
+
+    static var available: Bool { status == .available }
+
+    static var status: Status {
         #if canImport(FoundationModels)
-        if #available(macOS 26, *) { return Bridge.available }
+        if #available(macOS 26, *) { return Bridge.status }
         #endif
-        return false
+        return .unsupported
+    }
+
+    /// The first-launch line asking to turn Apple Intelligence on: only when this Mac could run it but hasn't, and
+    /// not once dismissed. Pure, for --selftest.
+    static func offersNudge(status: Status, dismissed: Bool) -> Bool { status == .notEnabled && !dismissed }
+
+    /// System Settings › Apple Intelligence & Siri (macOS 26's pane id), or System Settings itself if that link fails.
+    static func openSettings() {
+        if !NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+        }
     }
 
     static func phrase(_ f: Insight.Facts) async -> String? {
@@ -113,6 +139,18 @@ enum Bridge {
     }
 
     static var available: Bool { SystemLanguageModel.default.availability == .available }
+
+    static var status: AppleIntelligence.Status {
+        switch SystemLanguageModel.default.availability {
+        case .available: return .available
+        case .unavailable(let reason):
+            switch reason {
+            case .appleIntelligenceNotEnabled: return .notEnabled
+            case .deviceNotEligible: return .notEligible
+            default: return .notReady   // the model is still on its way down
+            }
+        }
+    }
 
     static func phrase(_ f: Insight.Facts) async -> String? {
         guard available else { return nil }

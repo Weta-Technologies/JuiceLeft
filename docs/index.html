@@ -132,7 +132,7 @@
         <a class="btn ghost" href="https://github.com/CyborgFingers/JuiceLeft">View on GitHub</a>
       </div>
       <p class="dl-meta">Version 1.1.0 · DMG · macOS 13+ on Apple Silicon · <a href="#install">install help</a> · <a href="https://github.com/CyborgFingers/JuiceLeft/releases">all releases</a></p>
-      <div class="badges"><span>By <a href="https://github.com/CyborgFingers">CyborgFingers</a></span><span>Swift &amp; SwiftUI</span><span>Freeware · all rights reserved</span><span>No network, no analytics</span></div>
+      <div class="badges"><span>By <a href="https://github.com/CyborgFingers">CyborgFingers</a></span><span>Swift &amp; SwiftUI</span><span>Freeware · all rights reserved</span><span>No analytics · signed updates</span></div>
     </div>
   </div>
 </header>
@@ -168,7 +168,7 @@
       <div class="card"><div class="icon">🧮</div><h3>Using the most power</h3><p>Your apps, the top five by share of processor time, helpers folded into the app that owns them, the rest as one <em>System &amp; background</em> line. Each with a ✕ Quit: a graceful quit first, so unsaved work gets its save prompt; Force Quit only if the app is still there 5 s later, behind one confirmation.</p></div>
       <div class="card"><div class="icon">❤️‍🩹</div><h3>Battery health, and a coach</h3><p>Apple's own health figure as the headline, then condition, cycles, the capacities, temperature, voltage, charger watts, watts in or out, total draw, macOS's estimate for comparison, the last twelve hours as a chart — and how much of the last three days the battery sat full, cycles per week, the health trend, and a one-tap <em>Set 80%</em>.</p></div>
       <div class="card"><div class="icon">✨</div><h3>A plain-English line</h3><p><em>“Draining at 14 % an hour, easier than your usual 20 % for this time of day.”</em> On macOS 26 with Apple Intelligence on, the on-device model phrases it — and every number is checked against JuiceLeft's own, so it can never invent one. Optional; the template stands everywhere else.</p></div>
-      <div class="card"><div class="icon">🧘</div><h3>Quiet by design</h3><p>Samples the battery every 30 s and only draws when something changes; the app list and the tips only run while the panel is open. No Dock icon, no network, no analytics. Launch at login, and the menu bar showing the icon, the percent, the compact time or the words.</p></div>
+      <div class="card"><div class="icon">🧘</div><h3>Quiet by design</h3><p>Samples the battery every 30 s and only draws when something changes; the app list and the tips only run while the panel is open. No Dock icon, no analytics, no network beyond a daily update check. Launch at login, and the menu bar showing the icon, the percent, the compact time or the words.</p></div>
     </div>
   </div>
 </section>
@@ -224,7 +224,7 @@
       <li>Open JuiceLeft from Applications. It isn't notarized by Apple yet, so the first launch needs one extra step:
         <strong>macOS 15 or later</strong> — when macOS says it can't verify the app, click <em>Done</em>, open <em>System Settings → Privacy &amp; Security</em>, scroll down and click <em>Open Anyway</em>;
         <strong>macOS 13–14</strong> — right-click JuiceLeft, choose <em>Open</em>, then <em>Open</em> again. Only the first time.</li>
-      <li>Apple's battery icon disappears and JuiceLeft's item takes its spot, with the time left after it. It asks once whether it may post notifications; say no and the pulse and the tone still work. The first time you set an energy mode (or click Save Battery) macOS asks for your password once, to install the helper.</li>
+      <li>Apple's battery icon disappears and JuiceLeft's item takes its spot, with the time left after it. It asks once whether it may post notifications; say no and the pulse and the tone still work. The panel offers a one-time setup for the helper behind energy modes and the charging light — your password or Touch ID, once; it then updates itself from signed files, and JuiceLeft checks GitHub for updates about once a day and installs them from the panel.</li>
     </ol>
     <h3 style="margin-top: 28px">Or build it from source</h3>
     <p class="muted">A few seconds with Xcode or the Command Line Tools (<code>xcode-select --install</code>):</p>
@@ -234,7 +234,7 @@ cd JuiceLeft
     <p class="muted">Builds <code>build/JuiceLeft.app</code>, copies it to <code>/Applications</code> and launches it. To uninstall, quit JuiceLeft (that puts Apple's battery icon back), run <code>sudo /bin/sh /Applications/JuiceLeft.app/Contents/Resources/juiceleft-helper.sh uninstall</code> if you ever set an energy mode, and move the app to the Trash — or <code>./build.sh uninstall</code> from a source checkout. If the battery icon didn't come back, <em>System Settings › Control Center › Battery › Show in Menu Bar</em> is the switch.</p>
     <ul class="muted">
       <li><strong>Test it:</strong> <code>JuiceLeft.app/Contents/MacOS/JuiceLeft --selftest</code> walks the alert rules, the forecast and its learning, the menu bar's words, the savings model, the tips, the guards and the click logic; <code>--simulate</code> runs a fake battery draining 1 % a second so you can watch the flash, the tone, the charger reset and the heat guard; <code>./test-helper.sh</code> checks the helper against a fake <code>pmset</code>.</li>
-      <li><strong>Privacy:</strong> no network, no analytics. The helper only ever runs <code>pmset</code>; the Apple Intelligence sentence is generated on device; settings and what it has learned are two files in your home folder, yours to delete.</li>
+      <li><strong>Privacy:</strong> no analytics; the only network activity is the daily update check (a plain request to GitHub, which you can turn off) and the update you start. Updates are Ed25519-signed and verified before anything is unpacked. The helper only ever runs <code>pmset</code>; the Apple Intelligence sentence is generated on device; settings and what it has learned are two files in your home folder, yours to delete.</li>
     </ul>
   </div>
 </section>

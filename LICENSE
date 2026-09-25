@@ -46,12 +46,15 @@ copyright, trademarks and other intellectual property rights. All rights not exp
 At your request the Software reads battery and power information; replaces the macOS battery menu-bar item (hiding Apple's and restoring it when you quit or turn the option off); can change energy modes and Apple's charge limit, adjust screen and keyboard brightness and control the MagSafe charging light; quits other apps when you click their Quit button; and plays alert sounds. Energy modes and the charging light use a helper that runs with administrator privileges, installed only after you approve an administrator prompt. Battery forecasts, accuracy figures and savings estimates are estimates only and may be wrong — don't rely on them where running out of battery could cause harm or loss. You can undo these changes as described in the README's Uninstall section.
 
 7. PRIVACY
-The Software does not collect, transmit, share or sell personal information, and it makes no network connections of its
-own. Details are in PRIVACY.md.
+The Software does not collect, transmit, share or sell personal information. Its only network activity is checking
+GitHub for updates and, when you choose to update, downloading them; you can turn update checks off. Details are in
+PRIVACY.md.
 
 8. UPDATES AND SUPPORT
 CyborgFingers may release updates, change or remove features, or stop offering the Software at any time, and has no
-obligation to provide support, maintenance or updates. Updates may be provided under updated terms.
+obligation to provide support, maintenance or updates. The Software can check for, download and install updates when
+you ask it to; each update is provided under the licence agreement current at its release, which you accept by
+installing it.
 
 9. PAID VERSIONS AND PRICING
 This agreement covers the versions and features of the Software that CyborgFingers makes available free of charge.

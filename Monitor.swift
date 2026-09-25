@@ -137,6 +137,13 @@ struct History: Codable, Equatable {
     @Published private(set) var chargeLimit: ChargeLimit.State?
     @Published private(set) var travelFull: Date?               // "Full for travel" is on since then
     @Published private(set) var smartApplied = false            // Smart Low Power has the mode
+    @Published private(set) var helperReady = PowerMode.helperReady
+    @Published private(set) var helperUpdating = false          // the installed helper is taking this build's signed files (no prompt)
+    @Published var setupLater = false                           // "Later" on the setup card, for this launch
+    @Published private(set) var aiStatus = AppleIntelligence.status
+    @Published private(set) var aiNudgeDismissed: Bool          // "Not now" on the Apple Intelligence line, remembered
+    /// The helper is there but from another version: a signed update, or the setup card.
+    var helperStale: Bool { !helperReady && PowerMode.helperInstalled }
     var interactive = true                                      // false = never raise the helper's admin prompt (harness, selftest, --simulate)
     let icon = MenuIcon()
     let light = LightController()
@@ -174,6 +181,7 @@ struct History: Codable, Equatable {
         self.historyURL = historyURL
         self.hardware = hardware
         s = Settings.load(defaults)
+        aiNudgeDismissed = defaults.bool(forKey: "aiNudgeDismissed")
         history = History.load(from: historyURL)
         saving = defaults.data(forKey: SaverSnapshot.key).flatMap { try? JSONDecoder().decode(SaverSnapshot.self, from: $0) }
         if let travel = defaults.object(forKey: "travelFull") as? [String: Any] {
@@ -206,6 +214,15 @@ struct History: Codable, Equatable {
     }
 
     func start() {
+        if interactive, helperStale {   // an app update changed the helper: the installed one takes the signed files itself
+            helperUpdating = true
+            HelperUpdate.request(ready: { PowerMode.helperReady }) { [weak self] _ in
+                guard let self else { return }
+                self.helperUpdating = false
+                self.helperReady = PowerMode.helperReady
+                self.evaluate()
+            }
+        }
         Notifier.setUp { [weak self] allowed in
             MainActor.assumeIsolated {
                 self?.notificationsAllowed = allowed
@@ -235,9 +252,19 @@ struct History: Codable, Equatable {
 
     func dismissWelcome() { welcome = false }
 
-    /// The friendly moment for the helper's admin prompt: the user clicked "Set up" for the charging light.
-    func setUpLight() {
-        note = PowerMode.installHelper().map { "The helper didn't install: \($0)" }
+    func dismissAINudge() {
+        aiNudgeDismissed = true
+        defaults.set(true, forKey: "aiNudgeDismissed")
+    }
+
+    /// The one administrator prompt (password or Touch ID): the setup card, a Set up… button, or Reinstall helper.
+    func setUpHelper() {
+        note = nil
+        switch PowerMode.installHelper() {
+        case .done: helperReady = true
+        case .cancelled: break
+        case .failed(let why): note = "The helper didn't install: \(why)"
+        }
         evaluate()
     }
 
@@ -299,12 +326,13 @@ struct History: Codable, Equatable {
         refreshTips()
     }
 
-    /// Sets the battery-side mode through the helper, installing it first if this is an interactive moment.
+    /// Sets the battery-side mode through the helper; without the helper it says so (never a prompt) and leaves the mode.
     @discardableResult
     private func requestPowerMode(_ mode: PowerMode.Mode, onBattery: Bool, reason: String) -> Bool {
-        if !PowerMode.helperReady {
-            guard interactive else { log?("\(reason): helper not installed, mode left alone"); return false }
-            if let why = PowerMode.installHelper() { note = "Energy modes need the helper: \(why)"; return false }
+        guard PowerMode.helperReady else {
+            if interactive { note = "Low Power needs the one-time setup — click Set up." }
+            log?("\(reason): helper not set up, mode left alone")
+            return false
         }
         if let why = PowerMode.set(mode, onBattery: onBattery) { note = why; return false }
         log?("\(reason): power mode → \(PowerMode.request(mode, onBattery: onBattery))")
@@ -432,6 +460,9 @@ struct History: Codable, Equatable {
     /// While the panel is open the modes are re-read once a minute, so a change made in System Settings shows here.
     func panelOpened() {
         panelIsOpen = true
+        if !helperUpdating { helperReady = PowerMode.helperReady }
+        aiStatus = AppleIntelligence.status   // turned on since launch? the nudge goes, and the sentence gets its phrasing
+        insight.retryAI(ai: s.insight)
         refreshPower()
         refreshChargeLimit()
         refreshTips()
@@ -456,11 +487,11 @@ struct History: Codable, Equatable {
         }
     }
 
-    /// Sets the mode for the source in use, installing the root helper (one admin prompt) the first time.
+    /// Sets the mode for the source in use through the helper (set up once from the panel; never a prompt here).
     func setPowerMode(_ mode: PowerMode.Mode) {
         guard mode != activeMode, let r = reading else { return }
         note = nil
-        if !PowerMode.helperReady, let why = PowerMode.installHelper() { note = "Energy modes need the helper: \(why)"; return }
+        guard PowerMode.helperReady else { note = "Energy modes need the one-time setup — click Set up."; return }
         if let why = PowerMode.set(mode, onBattery: !r.onAC) { note = why; return }
         powerBusy = true
         log?("power mode → \(PowerMode.request(mode, onBattery: !r.onAC))")

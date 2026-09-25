@@ -369,9 +369,9 @@ struct StretchCard: View {
              lit: monitor.s.smartLowPower || monitor.s.brightnessCap || (monitor.chargeLimit?.enabled ?? false),
              expanded: $expanded, help: "Things JuiceLeft can do by itself to make a charge last, and to make the battery last.", trailing: { EmptyView() }) {
             Divider()
-            SwitchRow(title: "Smart Low Power", subtitle: PowerMode.helperReady ? "Low Power Mode by itself at \(SmartLowPower.level)% or under an hour left; the old mode is back on the charger"
-                                                                              : "At \(SmartLowPower.level)% or under an hour left. Set an energy mode above once to install the helper it needs",
-                      help: "Uses the energy-mode helper (installed once with your password, the first time a mode is set). Change the mode by hand and JuiceLeft stands back until the next charge.",
+            SwitchRow(title: "Smart Low Power", subtitle: monitor.helperReady ? "Low Power Mode by itself at \(SmartLowPower.level)% or under an hour left; the old mode is back on the charger"
+                                                                             : "At \(SmartLowPower.level)% or under an hour left, once JuiceLeft's helper is set up",
+                      help: "Uses the energy-mode helper (set up once, with your password or Touch ID). Change the mode by hand and JuiceLeft stands back until the next charge.",
                       isOn: $monitor.s.smartLowPower)
             SwitchRow(title: "Keep the screen at or below", subtitle: "On battery, and never turned up",
                       help: "Turns the built-in screen down to the cap whenever it is brighter on battery, and puts it back on the charger.",
@@ -550,10 +550,13 @@ struct GeneralRows: View {
             SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
                       help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
                       isOn: $monitor.s.replaceSystemIcon)
-            if AppleIntelligence.available {
+            if monitor.aiStatus == .available {
                 SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line on this Mac; the numbers are always JuiceLeft's",
                           help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)
             }
+            Button("Reinstall helper…") { monitor.setUpHelper() }
+                .buttonStyle(.link).font(.caption)
+                .help("If energy modes or the charging light ever stop working: reinstalls JuiceLeft's helper (one administrator prompt).")
         }
     }
 }
@@ -590,11 +593,11 @@ struct LightRows: View {
                       help: "A fast orange blink until the battery is above the tone level, then the pattern above.", isOn: $monitor.s.lightFastWhenLow)
             if light.needsSetup {
                 HStack(spacing: 8) {
-                    Text("The light needs JuiceLeft's helper — your password, once.").font(.caption).foregroundStyle(.secondary)
+                    Text("The light needs JuiceLeft's helper — your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 6)
-                    Button("Set up…") { monitor.setUpLight() }.controlSize(.small)
-                        .help("Installs (or updates) the small root helper that also sets energy modes. macOS asks for your password.")
+                    Button("Set up…") { monitor.setUpHelper() }.controlSize(.small)
+                        .help("Installs (or updates) the small root helper that also sets energy modes. macOS asks for your password or Touch ID, this once.")
                 }
             }
         }

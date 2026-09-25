@@ -62,6 +62,16 @@ struct Panel: View {
                 }
                 .transition(.opacity)
             }
+            if !monitor.helperReady, !monitor.setupLater {
+                SetupCard(appName: "JuiceLeft", what: "Energy modes and the charging light", updating: monitor.helperStale, busy: monitor.helperUpdating,
+                          setUp: { monitor.setUpHelper() }, later: { withAnimation(reduceMotion ? nil : panelEase) { monitor.setupLater = true } })
+                    .transition(.opacity)
+            }
+            if AppleIntelligence.offersNudge(status: monitor.aiStatus, dismissed: monitor.aiNudgeDismissed) {
+                IntelligenceNudge { withAnimation(reduceMotion ? nil : panelEase) { monitor.dismissAINudge() } }
+                    .transition(.opacity)
+            }
+            UpdateCard(updater: .shared)
             AlertsCard(monitor: monitor)
             EnergyCard(meter: monitor.energy)
             BatteryCard(monitor: monitor)
@@ -79,6 +89,7 @@ struct Panel: View {
                     .help("Quit JuiceLeft (⌘Q). No alerts until it runs again.")
             }
             .font(.callout)
+            UpdateRows(updater: .shared)
             HStack(spacing: 4) {
                 Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · by")
                 Link("CyborgFingers", destination: URL(string: "https://github.com/CyborgFingers")!)
@@ -97,6 +108,29 @@ struct Panel: View {
         .animation(reduceMotion ? nil : panelEase, value: monitor.heatNote)
         .animation(reduceMotion ? nil : panelEase, value: monitor.tips)
         .animation(reduceMotion ? nil : panelEase, value: monitor.saving)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.helperReady)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.aiNudgeDismissed)
+    }
+}
+
+/// First launch on a Mac that could run Apple Intelligence but has it off: one line, and the setting it lives in.
+struct IntelligenceNudge: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "sparkles").foregroundStyle(Color.accentColor).imageScale(.small).frame(width: 14)
+            Text("Turn on Apple Intelligence for plain-English battery tips").font(.callout).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Button("Not now") { dismiss() }
+                .help("Don't ask again. The Apple Intelligence wording switch appears below once it is on.")
+            Button("Open Settings") { AppleIntelligence.openSettings() }
+                .help("System Settings › Apple Intelligence & Siri. JuiceLeft starts using it as soon as it is on; everything stays on your Mac.")
+        }
+        .controlSize(.small)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.accentColor.opacity(0.12)))
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -220,8 +254,17 @@ struct EnergyModeRow: View {
                     ForEach(modes) { Text($0.name).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
-                .disabled(monitor.powerBusy)
-                .help("The energy mode for the power source in use now — the same setting as System Settings › Battery. Low Power stretches the battery; High Power lets the Mac run flat out on the charger. Changing it needs a small helper, installed once with your password.")
+                .disabled(monitor.powerBusy || !monitor.helperReady)
+                .help("The energy mode for the power source in use now — the same setting as System Settings › Battery. Low Power stretches the battery; High Power lets the Mac run flat out on the charger. Changing it needs JuiceLeft's helper, set up once with your password or Touch ID.")
+                if !monitor.helperReady, !monitor.helperUpdating {
+                    HStack(spacing: 8) {
+                        Text("Needs JuiceLeft's helper — your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 6)
+                        Button("Set up…") { monitor.setUpHelper() }.controlSize(.small)
+                            .help("Installs the helper for energy modes and the charging light. macOS asks for your password or Touch ID, this once.")
+                    }
+                }
             }
             .padding(.horizontal, 2)
         }

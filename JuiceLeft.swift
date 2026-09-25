@@ -22,6 +22,7 @@ import SwiftUI
     private var statusItem: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if Updater.shared.testRun { return Updater.shared.start() }   // --update-test: only the updater, on a copy of the app
         let args = CommandLine.arguments
         let simulate = args.contains("--simulate")
         let source: BatterySource = simulate ? Simulator(hold: args.contains("hold")) : LiveBattery()
@@ -36,6 +37,7 @@ import SwiftUI
         self.monitor = monitor
         statusItem = StatusItemController(monitor: monitor)
         monitor.start()
+        if !simulate { Updater.shared.start() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -194,7 +196,12 @@ import SwiftUI
     check(!EnergyMeter.mayQuit(bundle: nil, bundleID: nil, policy: .regular, isSelf: false), "not a bare process")
     check(!EnergyMeter.mayQuit(bundle: "/Library/Foo.app", bundleID: "x", policy: .prohibited, isSelf: false), "not a background process")
 
-    // Apple Intelligence guard: the model may only use numbers it was given.
+    // Apple Intelligence guard: the model may only use numbers it was given. The first-launch nudge: only on a Mac
+    // that could run it but has it off, and never again once dismissed.
+    check(AppleIntelligence.offersNudge(status: .notEnabled, dismissed: false) && !AppleIntelligence.offersNudge(status: .notEnabled, dismissed: true), "nudge when off, not once dismissed")
+    for status in [AppleIntelligence.Status.available, .notEligible, .notReady, .unsupported] {
+        check(!AppleIntelligence.offersNudge(status: status, dismissed: false), "no nudge when \(status)")
+    }
     check(AppleIntelligence.keepsNumbers("Flat in 2 h 50 min, at 34%.", facts: "Battery 34%. Flat in 2 h 50 min."), "numbers kept")
     check(!AppleIntelligence.keepsNumbers("About 3 hours left.", facts: "Battery 34%. Flat in 2 h 50 min."), "invented number caught")
     let facts = Insight.Facts(percent: 34, onAC: false, charging: false, full: false, minutesLeft: 170, ratePerHour: 12, typicalRate: 9, topApps: ["Chrome"])
@@ -366,8 +373,10 @@ import SwiftUI
     check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%")).size.width > MenuIcon.glyphWidth + 20, "percent makes room for the text")
     check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%", trailing: "2 Hours 10 Min Remaining")).size.width > MenuIcon.glyphWidth + 120, "the words make room after the glyph")
 
+    Updater.selfTest()   // versions, the release feed, signatures, the swap script on a fake bundle
+
     let r = reading!
     print("MagSafe port: \(MagSafePort.exists ? "present" : "none"), power through it now: \(MagSafePort.active), lid closed: \(Lid.read())")
-    print("PASS: alert rules, forecast + learning (priors \(String(format: "%.1f", morning.rate))/\(String(format: "%.1f", evening.rate)) → \(String(format: "%.1f", evening2.rate)) %/h, miss \(String(format: "%.0f", (learner.relativeError ?? 0) * 100))%), settings, apps, gesture, glyphs; battery \(r.percent)% \(r.onAC ? "on power" : "on battery"), health \(r.health.map { String(format: "%.0f%%", $0) } ?? "?"), \(r.cycles ?? 0) cycles; Apple Intelligence \(AppleIntelligence.available ? "available" : "not available")")
+    print("PASS: alert rules, forecast + learning (priors \(String(format: "%.1f", morning.rate))/\(String(format: "%.1f", evening.rate)) → \(String(format: "%.1f", evening2.rate)) %/h, miss \(String(format: "%.0f", (learner.relativeError ?? 0) * 100))%), settings, apps, gesture, glyphs, updater; battery \(r.percent)% \(r.onAC ? "on power" : "on battery"), health \(r.health.map { String(format: "%.0f%%", $0) } ?? "?"), \(r.cycles ?? 0) cycles; Apple Intelligence \(AppleIntelligence.status)")
     exit(0)
 }
