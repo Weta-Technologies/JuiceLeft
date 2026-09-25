@@ -79,6 +79,93 @@ enum SystemBattery {
     }
 }
 
+/// Apple's own Charge Limit (macOS 26.4+, Apple silicon): the setting behind System Settings › Battery › Charging.
+/// Reached through PowerUI's smart-charge client in-process — the same client Apple's UI uses — with no root, no
+/// helper and no SMC keys (which newer firmware has removed). The firmware holds the limit and even drains a
+/// battery above it down to it. 100 means no limit; below 80 is refused by the system, so those steps aren't offered.
+/// `temporarilyDisableMCL:` is Apple's "charge to full now": it lets the battery fill once and is cleared by JuiceLeft
+/// at the next unplug (or after a day).
+enum ChargeLimit {
+    struct State: Equatable {
+        var enabled: Bool
+        var limit: Int             // 80…100; 100 = no limit
+        var available: [Int]
+    }
+
+    static let steps = [80, 85, 90, 95, 100]
+    static let recommended = 80
+
+    private typealias InitName = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
+    private typealias BoolNoArg = @convention(c) (AnyObject, Selector) -> Bool
+    private typealias U8Err = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<NSError?>?) -> UInt8
+    private typealias U64Err = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<NSError?>?) -> UInt64
+    private typealias ObjErr = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<NSError?>?) -> AnyObject?
+    private typealias BoolErr = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<NSError?>?) -> Bool
+    private typealias SetU8Err = @convention(c) (AnyObject, Selector, UInt8, UnsafeMutablePointer<NSError?>?) -> Bool
+
+    private static let client: NSObject? = {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        guard version.majorVersion > 26 || (version.majorVersion == 26 && version.minorVersion >= 4),
+              dlopen("/System/Library/PrivateFrameworks/PowerUI.framework/PowerUI", RTLD_NOW) != nil,
+              let cls = NSClassFromString("PowerUISmartChargeClient") as? NSObject.Type else { return nil }
+        let client = cls.init()
+        if let (sel, f) = imp(client, "initWithClientName:", InitName.self) { _ = f(client, sel, "JuiceLeft") }
+        return client
+    }()
+
+    private static func imp<T>(_ object: NSObject, _ name: String, _ type: T.Type) -> (Selector, T)? {
+        let sel = NSSelectorFromString(name)
+        guard let m = class_getInstanceMethod(Swift.type(of: object), sel) else { return nil }
+        return (sel, unsafeBitCast(method_getImplementation(m), to: type))
+    }
+
+    /// macOS 26.4+, the framework loads, and the system says this Mac can limit its charge.
+    static let supported: Bool = {
+        guard let client, let (sel, f) = imp(client, "isMCLSupported", BoolNoArg.self) else { return false }
+        return f(client, sel)
+    }()
+
+    static func read() -> State? {
+        guard supported, let client,
+              let (sEnabled, enabled) = imp(client, "isMCLCurrentlyEnabled:", U64Err.self),
+              let (sLimit, limit) = imp(client, "getMCLLimitWithError:", U8Err.self) else { return nil }
+        var e1: NSError?, e2: NSError?
+        let on = enabled(client, sEnabled, &e1) != 0, value = Int(limit(client, sLimit, &e2))
+        guard e1 == nil, e2 == nil else { return nil }
+        var available = steps
+        if let (sAvail, avail) = imp(client, "availableChargeLimitsWithError:", ObjErr.self) {
+            var e3: NSError?
+            if let list = avail(client, sAvail, &e3) as? [NSNumber], !list.isEmpty { available = list.map(\.intValue) }
+        }
+        return State(enabled: on, limit: on ? value : 100, available: available)
+    }
+
+    /// Sets the limit; 100 turns limiting off. Returns an error message, or nil.
+    static func set(_ limit: Int) -> String? {
+        guard supported, let client,
+              let (sSet, setLimit) = imp(client, "setMCLLimit:error:", SetU8Err.self),
+              let (sOn, enable) = imp(client, "enableMCL:", BoolErr.self),
+              let (sOff, disable) = imp(client, "disableMCL:", BoolErr.self) else { return "Charge limit isn't available on this Mac." }
+        guard limit >= 80, limit <= 100 else { return "macOS only allows limits from 80% to 100%." }
+        var error: NSError?
+        if limit >= 100 {
+            _ = setLimit(client, sSet, 100, &error)
+            guard disable(client, sOff, &error) else { return error?.localizedDescription ?? "macOS didn't turn the limit off." }
+            return nil
+        }
+        guard setLimit(client, sSet, UInt8(limit), &error) else { return error?.localizedDescription ?? "macOS didn't accept \(limit)%." }
+        guard enable(client, sOn, &error) else { return error?.localizedDescription ?? "macOS didn't turn the limit on." }
+        return nil
+    }
+
+    /// Apple's "charge to full now": one full charge, the limit untouched.
+    static func fullNow() -> String? {
+        guard supported, let client, let (sel, f) = imp(client, "temporarilyDisableMCL:", BoolErr.self) else { return "Charge limit isn't available on this Mac." }
+        var error: NSError?
+        return f(client, sel, &error) ? nil : error?.localizedDescription ?? "macOS didn't allow a full charge right now."
+    }
+}
+
 /// Energy modes — Low Power, Automatic, High Power — the same `pmset powermode` System Settings › Battery sets, per
 /// power source. Reading is free (`pmset -g custom`); setting needs root, so it goes through juiceleft-helper.sh: a
 /// root launchd job installed once with an admin prompt that applies a one-line request file (`b 1` = battery, low

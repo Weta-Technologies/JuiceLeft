@@ -17,6 +17,10 @@ struct Settings: Codable, Equatable {
     var menuBar = MenuBar.words     // "84% [battery] 2 Hours 10 Min Remaining"
     var replaceSystemIcon = true // hide Apple's battery item while JuiceLeft runs
     var insight = true           // the plain-English line (Apple Intelligence phrases it when available)
+    var smartLowPower = true     // Low Power Mode by itself at 30 % (or under an hour left), back on the charger
+    var brightnessCap = false    // keep the screen at or below `brightnessCapLevel` on battery
+    var brightnessCapLevel = 0.5
+    var heatGuard = true         // a nudge when the pack runs hot
 
     static let key = "settings"
 
@@ -38,6 +42,7 @@ struct Settings: Codable, Equatable {
         s.warnAt = max(5, min(50, s.warnAt))
         s.alertAt = max(1, min(s.warnAt, s.alertAt))
         s.volume = max(0, min(1, s.volume))
+        s.brightnessCapLevel = max(0.2, min(0.8, s.brightnessCapLevel))
         return s
     }
 }
@@ -53,6 +58,24 @@ struct History: Codable, Equatable {
     }
     var points: [Point] = []
     var learner = Learner()
+    var savings = Savings()        // what brightness and Low Power cost on this Mac
+    var days: [DayLog] = []        // one line a day: cycles and health, for the coach
+
+    init(points: [Point] = [], learner: Learner = Learner(), savings: Savings = Savings(), days: [DayLog] = []) {
+        self.points = points
+        self.learner = learner
+        self.savings = savings
+        self.days = days
+    }
+
+    /// Fields added in later versions are optional on the way in, so an older file keeps its learner.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        points = try c.decodeIfPresent([Point].self, forKey: .points) ?? []
+        learner = try c.decodeIfPresent(Learner.self, forKey: .learner) ?? Learner()
+        savings = try c.decodeIfPresent(Savings.self, forKey: .savings) ?? Savings()
+        days = try c.decodeIfPresent([DayLog].self, forKey: .days) ?? []
+    }
 
     static let keep: TimeInterval = 3 * 24 * 3600
     static let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -103,6 +126,14 @@ struct History: Codable, Equatable {
     @Published private(set) var power = PowerMode.State()      // energy modes per source
     @Published private(set) var powerBusy = false               // a change is on its way through the helper
     @Published private(set) var welcome = false                 // first run: say what happened to Apple's icon
+    @Published private(set) var saving: SaverSnapshot?          // Save Battery is on: what to put back
+    @Published private(set) var tips: [Tip] = []                // what is costing power right now (while the panel is open)
+    @Published private(set) var heat = HeatGuard()
+    @Published var heatNote: String?                            // the once-per-episode nudge, dismissable
+    @Published private(set) var chargeLimit: ChargeLimit.State?
+    @Published private(set) var travelFull: Date?               // "Full for travel" is on since then
+    @Published private(set) var smartApplied = false            // Smart Low Power has the mode
+    var interactive = true                                      // false = never raise the helper's admin prompt (harness, selftest, --simulate)
     let icon = MenuIcon()
     let tone = Tone()
     let energy = EnergyMeter()
@@ -123,13 +154,27 @@ struct History: Codable, Equatable {
     private var powerTimer: Timer?
     private var steady = Steady()                               // the menu bar's spelled-out minutes
     private(set) var squeezed = false                           // macOS had no room for the item: fall back to the compact form
+    let hardware: Hardware
+    private var careWindow: (start: Date, level: Double, brightnessSum: Double, samples: Int, lowPower: Int)?
+    private var smartPrevious: PowerMode.Mode?
+    private var smartUserChanged = false
+    private var cappedFrom: Float?
+    private var travelPrevious: Int?
+    static let careWindowLength: TimeInterval = 5 * 60
+    static let travelMax: TimeInterval = 24 * 3600
 
-    init(source: BatterySource, defaults: UserDefaults = .standard, historyURL: URL = History.url) {
+    init(source: BatterySource, defaults: UserDefaults = .standard, historyURL: URL = History.url, hardware: Hardware = RealHardware()) {
         self.source = source
         self.defaults = defaults
         self.historyURL = historyURL
+        self.hardware = hardware
         s = Settings.load(defaults)
         history = History.load(from: historyURL)
+        saving = defaults.data(forKey: SaverSnapshot.key).flatMap { try? JSONDecoder().decode(SaverSnapshot.self, from: $0) }
+        if let travel = defaults.object(forKey: "travelFull") as? [String: Any] {
+            travelFull = travel["since"] as? Date
+            travelPrevious = travel["previous"] as? Int
+        }
         // Asked-for default: start at login — but only for an installed copy, never a build tree or a test run.
         if !defaults.bool(forKey: "loginItemOffered"), Bundle.main.bundleURL.path.hasPrefix("/Applications/") {
             defaults.set(true, forKey: "loginItemOffered")
@@ -181,6 +226,152 @@ struct History: Codable, Equatable {
 
     func dismissWelcome() { welcome = false }
 
+    // MARK: Save Battery
+
+    /// What one click would gain right now, from this Mac's own numbers where it has them.
+    var saveBatteryGain: (minutes: Int, estimated: Bool)? {
+        guard let r = reading, !r.onAC, let f = forecast, f.kind == .flat, saving == nil else { return nil }
+        var parts: [Saving] = []
+        if let b = hardware.brightness(), Double(b) > Tips.dimTo { parts.append(history.savings.brightness(from: Double(b), to: Tips.dimTo, rate: f.ratePerHour)) }
+        if let k = hardware.keyboard(), k.brightness > 0 { parts.append(Savings.keyboard()) }
+        if !r.lowPowerMode { parts.append(history.savings.lowPower(rate: f.ratePerHour)) }
+        let all = Savings.combined(parts)
+        return (all.minutes(level: r.level, ratePerHour: f.ratePerHour), !all.learned)
+    }
+
+    /// One click: Low Power Mode, the screen down to 40 % (never up), the keyboard light off — remembering each.
+    func saveBattery() {
+        guard saving == nil, let r = reading, !r.onAC else { return }
+        var snap = SaverSnapshot(at: r.at)
+        if let b = hardware.brightness() {
+            snap.brightness = b
+            if Double(b) > Tips.dimTo { hardware.setBrightness(Float(Tips.dimTo)) }
+        }
+        if let k = hardware.keyboard() {
+            snap.keyboard = k
+            if k.brightness > 0 || k.auto { hardware.setKeyboard(.init(brightness: 0, auto: false)) }
+        }
+        if !r.lowPowerMode, requestPowerMode(.low, onBattery: true, reason: "Save Battery") {
+            snap.batteryMode = (power.battery ?? .automatic).rawValue
+        }
+        saving = snap
+        defaults.set(try? JSONEncoder().encode(snap), forKey: SaverSnapshot.key)
+        log?("save battery: \(snap)")
+        evaluate()
+    }
+
+    /// Everything back exactly as it was.
+    func undoSaveBattery() {
+        guard let snap = saving else { return }
+        if let b = snap.brightness { hardware.setBrightness(b) }
+        if let k = snap.keyboard { hardware.setKeyboard(k) }
+        if let mode = snap.batteryMode.flatMap(PowerMode.Mode.init(rawValue:)) { _ = requestPowerMode(mode, onBattery: true, reason: "undo") }
+        saving = nil
+        defaults.removeObject(forKey: SaverSnapshot.key)
+        log?("save battery undone")
+        evaluate()
+    }
+
+    /// A one-click fix from a tip.
+    func apply(_ tip: Tip) {
+        switch tip.fix {
+        case .dim(let to): if let b = hardware.brightness(), Double(b) > to { hardware.setBrightness(Float(to)) }
+        case .keyboardOff: hardware.setKeyboard(.init(brightness: 0, auto: false))
+        case .lowPower: _ = requestPowerMode(.low, onBattery: true, reason: "tip")
+        case .quit(let name): if let app = energy.ranking.apps.first(where: { $0.name == name }) { energy.quit(app) }
+        case .unplugUSB: break
+        }
+        refreshTips()
+    }
+
+    /// Sets the battery-side mode through the helper, installing it first if this is an interactive moment.
+    @discardableResult
+    private func requestPowerMode(_ mode: PowerMode.Mode, onBattery: Bool, reason: String) -> Bool {
+        if !PowerMode.helperReady {
+            guard interactive else { log?("\(reason): helper not installed, mode left alone"); return false }
+            if let why = PowerMode.installHelper() { note = "Energy modes need the helper: \(why)"; return false }
+        }
+        if let why = PowerMode.set(mode, onBattery: onBattery) { note = why; return false }
+        log?("\(reason): power mode → \(PowerMode.request(mode, onBattery: onBattery))")
+        for delay in [1.0, 3.0] { DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { self.refreshPower() } } }
+        return true
+    }
+
+    // MARK: Charge limit
+
+    func refreshChargeLimit() {
+        guard ChargeLimit.supported else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let state = ChargeLimit.read()
+            DispatchQueue.main.async { MainActor.assumeIsolated { if state != self.chargeLimit { self.chargeLimit = state } } }
+        }
+    }
+
+    func setChargeLimit(_ limit: Int) {
+        note = ChargeLimit.set(limit)
+        if note == nil { chargeLimit = chargeLimit.map { State(enabled: limit < 100, limit: limit, available: $0.available) } }
+        log?("charge limit → \(limit)")
+        refreshChargeLimit()
+    }
+    private typealias State = ChargeLimit.State
+
+    /// One tap: let it fill to 100 % once; the limit comes back after the next unplug, or after a day plugged in.
+    func fullForTravel() {
+        guard let current = chargeLimit, current.enabled else { return }
+        if let why = ChargeLimit.fullNow() { note = why; return }
+        travelPrevious = current.limit
+        travelFull = reading?.at ?? Date()
+        defaults.set(["since": travelFull!, "previous": current.limit], forKey: "travelFull")
+        log?("full for travel from \(current.limit)%")
+    }
+
+    func cancelFullForTravel() { endTravel() }
+
+    private func endTravel() {
+        guard travelFull != nil else { return }
+        if let previous = travelPrevious { note = ChargeLimit.set(previous) }
+        travelFull = nil
+        travelPrevious = nil
+        defaults.removeObject(forKey: "travelFull")
+        refreshChargeLimit()
+    }
+
+    // MARK: Care
+
+    var careFacts: CareFacts {
+        var f = CareFacts()
+        guard let r = reading else { return f }
+        f.onAC = r.onAC; f.percent = r.percent; f.level = r.level; f.lowPower = r.lowPowerMode
+        f.ratePerHour = forecast?.kind == .flat ? forecast?.ratePerHour : nil
+        f.batteryWatts = r.batteryWatts.map { -$0 }
+        f.brightness = hardware.brightness().map(Double.init)
+        f.keyboardOn = (hardware.keyboard()?.brightness ?? 0) > 0
+        f.ambient = hardware.ambientLight()
+        f.topApp = energy.ranking.apps.first.map { ($0.name, $0.cpuPercent, $0.share) }
+        f.usbDevices = hardware.usbDevices().map { ($0.name, $0.milliamps) }
+        return f
+    }
+
+    func refreshTips() {
+        guard panelIsOpen else { return }
+        let fresh = Tips.detect(careFacts, savings: history.savings)
+        if fresh != tips { tips = fresh }
+    }
+
+    /// The five-minute windows that teach `Savings` what brightness and Low Power cost here.
+    private func learnCare(_ r: Reading) {
+        guard !r.onAC, let b = hardware.brightness() else { careWindow = nil; return }
+        guard var w = careWindow else { careWindow = (r.at, r.level, Double(b), 1, r.lowPowerMode ? 1 : 0); return }
+        w.brightnessSum += Double(b); w.samples += 1; w.lowPower += r.lowPowerMode ? 1 : 0
+        if r.at.timeIntervalSince(w.start) >= Self.careWindowLength {
+            let hours = r.at.timeIntervalSince(w.start) / 3600
+            history.savings.learn(rate: (w.level - r.level) / hours, brightness: w.brightnessSum / Double(w.samples), lowPower: w.lowPower * 2 > w.samples)
+            careWindow = (r.at, r.level, Double(b), 1, r.lowPowerMode ? 1 : 0)
+        } else {
+            careWindow = w
+        }
+    }
+
     // MARK: Energy modes
 
     /// The status item found (or lost) room in the menu bar.
@@ -192,6 +383,13 @@ struct History: Codable, Equatable {
 
     /// The mode for the power source in use right now.
     var activeMode: PowerMode.Mode? { reading?.onAC == true ? power.adapter : power.battery }
+
+    /// The battery-side mode as the system reports it live (Low Power Mode active), else as last read from pmset.
+    private var batteryModeNow: PowerMode.Mode? {
+        guard let r = reading else { return nil }
+        if r.lowPowerMode { return .low }
+        return power.battery == .low ? .automatic : power.battery ?? .automatic
+    }
 
     private(set) var panelIsOpen = false
 
@@ -220,6 +418,8 @@ struct History: Codable, Equatable {
     func panelOpened() {
         panelIsOpen = true
         refreshPower()
+        refreshChargeLimit()
+        refreshTips()
         energy.start()
         let timer = Timer(timeInterval: 60, repeats: true) { _ in MainActor.assumeIsolated { self.refreshPower() } }
         RunLoop.main.add(timer, forMode: .common)
@@ -228,6 +428,7 @@ struct History: Codable, Equatable {
 
     func panelClosed() {
         panelIsOpen = false
+        tips = []
         energy.stop()
         powerTimer?.invalidate()
         powerTimer = nil
@@ -281,6 +482,8 @@ struct History: Codable, Equatable {
             if !previous.onAC, !slept { history.learner.endDischarge(now: r.at, level: previous.level) } else { history.learner.abandon() }
             samples = []
             steady.reset()
+            careWindow = nil
+            if r.onAC != previous.onAC { plugEdge(r) }
             remindedUnplug = false
             noticedFull = false
             if !slept, r.onAC != previous.onAC { plugChanged(r) }
@@ -328,12 +531,61 @@ struct History: Codable, Equatable {
         let parts = Self.menuParts(squeezed && s.menuBar == .words ? .compact : s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full,
                                    charging: r.charging, minutes: minutes)
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
+        care(r)
         insight.update(facts, ai: s.insight)
     }
 
     private func notify(id: String, title: String, body: String) {
         log?("notification “\(title)” \(body)")
         Notifier.post(id: id, title: title, body: body)
+    }
+
+    /// The charger went in or out: everything automatic steps back.
+    private func plugEdge(_ r: Reading) {
+        if r.onAC {
+            if saving != nil { undoSaveBattery() }
+            if smartApplied { _ = requestPowerMode(smartPrevious ?? .automatic, onBattery: true, reason: "smart low power, charger in"); smartApplied = false }
+            smartUserChanged = false
+            if let from = cappedFrom { hardware.setBrightness(from); cappedFrom = nil }
+        } else {
+            endTravel()   // the trip's full charge has happened; the limit comes back
+            if let since = travelFull, r.at.timeIntervalSince(since) > Self.travelMax { endTravel() }
+        }
+    }
+
+    /// The automatic helpers, every reading: heat, Smart Low Power, the brightness cap, learning, the coach's log.
+    private func care(_ r: Reading) {
+        if let t = r.celsius, s.heatGuard {
+            if heat.step(celsius: t, charging: r.onAC && r.charging) {
+                let line = String(format: "Battery at %.0f °C. ", t) + HeatGuard.advice(charging: r.onAC)
+                heatNote = line
+                if s.notify { notify(id: "heat", title: "Battery running hot", body: line) }
+                log?("hot: \(line)")
+            } else if !heat.hot, heatNote != nil { heatNote = nil }
+        }
+        if let since = travelFull, r.onAC, r.at.timeIntervalSince(since) > Self.travelMax { endTravel() }
+        // Smart Low Power: engage low, put the old mode back on the charger, and stand down if the user moved it.
+        if smartApplied, !r.onAC, !r.lowPowerMode, power.battery != .low { smartApplied = false; smartUserChanged = true; log?("smart low power: user changed the mode") }
+        switch SmartLowPower.decide(enabled: s.smartLowPower && s.armed, onAC: r.onAC, percent: r.percent, minutesLeft: forecast?.kind == .flat ? forecast?.minutes : nil,
+                                    mode: batteryModeNow, applied: smartApplied, previous: smartPrevious, userChanged: smartUserChanged) {
+        case .engage:   // automatic, so never a password prompt: without the helper the tip offers Low Power instead
+            guard PowerMode.helperReady else { break }
+            smartPrevious = batteryModeNow
+            if requestPowerMode(.low, onBattery: true, reason: "smart low power") { smartApplied = true }
+        case .restore(let mode):
+            _ = requestPowerMode(mode, onBattery: true, reason: "smart low power, charger in")
+            smartApplied = false
+        case .none: break
+        }
+        // The brightness cap: down to the cap on battery, never up; back on the charger.
+        if let b = hardware.brightness(), let target = BrightnessCap.target(enabled: s.brightnessCap, onAC: r.onAC, brightness: b, cap: s.brightnessCapLevel) {
+            if cappedFrom == nil { cappedFrom = b }
+            hardware.setBrightness(target)
+            log?("brightness capped to \(target)")
+        }
+        learnCare(r)
+        if let c = r.cycles { history.days = HealthCoach.logged(history.days, cycles: c, health: r.health, now: r.at) }
+        refreshTips()
     }
 
     private func plugChanged(_ r: Reading) {
@@ -421,4 +673,13 @@ struct History: Codable, Equatable {
                       typicalRate: reading.map { history.learner.prior(at: $0.at) } ?? nil,
                       topApps: energy.ranking.apps.prefix(2).map(\.name))
     }
+}
+
+/// What Save Battery changed, so Undo (or the charger) can put it back exactly. Persisted, so a relaunch can still undo.
+struct SaverSnapshot: Codable, Equatable {
+    var at: Date
+    var brightness: Float?
+    var keyboard: KeyboardLight.Level?
+    var batteryMode: Int?          // the mode Low Power replaced, if Save Battery changed it
+    static let key = "saver"
 }

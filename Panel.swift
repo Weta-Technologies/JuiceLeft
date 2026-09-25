@@ -39,6 +39,12 @@ struct Panel: View {
         VStack(alignment: .leading, spacing: 12) {
             StatusHeader(monitor: monitor)
             InsightLine(monitor: monitor, insight: monitor.insight)
+            SaveBatteryRow(monitor: monitor)
+            if let heat = monitor.heatNote {
+                Notice(text: heat, kind: .warning) { monitor.heatNote = nil }
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            }
+            TipRows(monitor: monitor)
             EnergyModeRow(monitor: monitor)
             if monitor.welcome {
                 Notice(text: "JuiceLeft has taken the place of the macOS battery icon. Turn “Replace the macOS battery icon” off below to bring it back; quitting brings it back too.", kind: .info) {
@@ -59,6 +65,7 @@ struct Panel: View {
             AlertsCard(monitor: monitor)
             EnergyCard(meter: monitor.energy)
             BatteryCard(monitor: monitor)
+            StretchCard(monitor: monitor)
             ChargingCard(monitor: monitor)
             GeneralRows(monitor: monitor)
             Divider()
@@ -84,6 +91,102 @@ struct Panel: View {
         .padding(14)
         .animation(reduceMotion ? nil : panelEase, value: monitor.note)
         .animation(reduceMotion ? nil : panelEase, value: monitor.welcome)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.heatNote)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.tips)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.saving)
+    }
+}
+
+/// The one big button: Low Power, screen to 40 %, keyboard light off — with what that gains, before the click —
+/// and one Undo that puts every one of them back. The charger undoes it too.
+struct SaveBatteryRow: View {
+    @ObservedObject var monitor: Monitor
+
+    var body: some View {
+        if let snap = monitor.saving {
+            HStack(spacing: 10) {
+                Image(systemName: "leaf.fill").foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Saving battery").font(.callout.weight(.semibold))
+                    Text(Self.describe(snap)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Button("Undo") { monitor.undoSaveBattery() }
+                    .help("Put the brightness, keyboard light and energy mode back exactly as they were. Plugging in does this too.")
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.green.opacity(0.12)))
+        } else if let gain = monitor.saveBatteryGain {
+            HStack(spacing: 10) {
+                Button {
+                    monitor.saveBattery()
+                } label: {
+                    Label(Tip.gainText(gain.minutes, estimated: gain.estimated).map { "Save Battery  \($0)" } ?? "Save Battery", systemImage: "leaf.fill")
+                        .font(.callout.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent).tint(.green).controlSize(.large)
+                .help("One click: Low Power Mode, the screen down to 40 % (never up), the keyboard light off. The apps using the most power are listed below with their ✕. Undo puts everything back exactly; so does plugging in.\(gain.estimated ? " The gain is estimated from typical Macs until JuiceLeft has watched this one for a while." : " The gain comes from what this Mac has actually saved before.")")
+                .accessibilityLabel("Save Battery" + (gain.minutes > 0 ? ", about \(Format.spokenDuration(gain.minutes)) more" : ""))
+            }
+        }
+    }
+
+    static func describe(_ snap: SaverSnapshot) -> String {
+        var parts: [String] = []
+        if let b = snap.brightness, Double(b) > Tips.dimTo { parts.append("screen \(Int((b * 100).rounded()))% → 40%") }
+        if let k = snap.keyboard, k.brightness > 0 || k.auto { parts.append("keyboard light off") }
+        if snap.batteryMode != nil { parts.append("Low Power on") }
+        return parts.isEmpty ? "Nothing needed changing" : parts.joined(separator: " · ")
+    }
+}
+
+/// What is costing power right now, each with its one-click fix. Only what is detected, at most two.
+struct TipRows: View {
+    @ObservedObject var monitor: Monitor
+
+    var body: some View {
+        if !monitor.tips.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(monitor.tips) { tip in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "lightbulb.fill").foregroundStyle(.yellow).imageScale(.small).frame(width: 14)
+                        Text(tip.text).font(.callout).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 6)
+                        if let gain = Tip.gainText(tip.gain, estimated: tip.estimated) {
+                            Text(gain).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                                .help(tip.estimated ? "A rough estimate from typical Macs (the ~); JuiceLeft learns this Mac's own numbers over time." : "From what this Mac has saved before.")
+                        }
+                        if tip.fix != .unplugUSB {
+                            Button(Self.verb(tip.fix)) { monitor.apply(tip) }.controlSize(.small)
+                                .help(Self.help(tip.fix))
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    static func verb(_ fix: Tip.Fix) -> String {
+        switch fix {
+        case .dim: return "Dim"
+        case .keyboardOff: return "Turn off"
+        case .lowPower: return "Low Power"
+        case .quit: return "Quit"
+        case .unplugUSB: return ""
+        }
+    }
+
+    static func help(_ fix: Tip.Fix) -> String {
+        switch fix {
+        case .dim: return "Turn the built-in screen down to 40 %."
+        case .keyboardOff: return "Turn the keyboard backlight off."
+        case .lowPower: return "Turn Low Power Mode on for battery power (needs the energy-mode helper, installed once with your password)."
+        case .quit(let app): return "Quit \(app) — its own save prompts protect unsaved work."
+        case .unplugUSB: return ""
+        }
     }
 }
 
@@ -99,6 +202,11 @@ struct EnergyModeRow: View {
                 HStack(spacing: 6) {
                     Text("Energy mode").font(.callout)
                     Text(monitor.reading?.onAC == true ? "on the charger" : "on battery").font(.caption).foregroundStyle(.secondary)
+                    if monitor.smartApplied {
+                        Text("Smart Low Power").font(.caption2.weight(.medium)).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.green.opacity(0.18))).foregroundStyle(.green)
+                            .help("JuiceLeft turned Low Power on for you; the previous mode comes back on the charger. Change it here and JuiceLeft leaves it alone.")
+                    }
                     if monitor.powerBusy { ProgressView().controlSize(.small) }
                     Spacer()
                     Button("Battery Settings…") { SystemBattery.openBatterySettings() }

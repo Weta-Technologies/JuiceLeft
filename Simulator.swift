@@ -50,7 +50,7 @@ final class Simulator: BatterySource {
         r.designCycles = 1000
         r.volts = 11.9 + percent / 100 * 1.1
         r.amps = onAC ? 2.4 : drain
-        r.celsius = 31.2
+        r.celsius = onAC ? min(31.2 + (percent - 4) * 0.25, 38) : 31.2   // warms up on the charger, past the 35 °C nudge
         r.systemWatts = onAC ? 18.3 : 21.1
         if onAC { r.adapterWatts = 68; r.adapterName = "70W USB-C Power Adapter" }
         return r

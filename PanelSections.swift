@@ -283,7 +283,11 @@ struct BatteryCard: View {
                                 help: "What a full charge can deliver right now. It moves with temperature and load, so it reads a few percent below the cell capacity most of the time — that is not wear.")
                     }
                     if let d = r.designCapacity { StatRow(label: "Design capacity", value: "\(Int(d.rounded()).formatted()) mAh", help: "What a full charge held when the battery was new.") }
-                    if let t = r.celsius { StatRow(label: "Temperature", value: String(format: "%.1f °C", t), help: "The battery pack. Charging is slower when it is hot.") }
+                    if let t = r.celsius {
+                        StatRow(label: "Temperature", value: String(format: "%.1f °C", t) + (monitor.heat.hot ? " · hot" : ""),
+                                help: monitor.heat.hot ? HeatGuard.advice(charging: r.onAC) : "The battery pack. Heat ages a battery faster than anything else; JuiceLeft nudges you at 35 °C on the charger, 40 °C on battery.")
+                            .foregroundStyle(monitor.heat.hot ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+                    }
                     if let v = r.volts { StatRow(label: "Voltage", value: String(format: "%.2f V", v)) }
                     if r.onAC {
                         StatRow(label: "Charger", value: [r.adapterWatts.map { "\($0) W" }, r.adapterName].compactMap { $0 }.joined(separator: " · ").ifEmpty("Connected"),
@@ -303,6 +307,134 @@ struct BatteryCard: View {
                 LevelChart(points: monitor.history.points, now: r.at, warnAt: monitor.s.warnAt, alertAt: monitor.s.alertAt)
                     .frame(height: 56)
                     .accessibilityLabel("Battery level over the last twelve hours")
+                HealthCoachRows(monitor: monitor)
+            }
+        }
+    }
+}
+
+/// How the battery is being treated, and the one habit that helps most.
+struct HealthCoachRows: View {
+    @ObservedObject var monitor: Monitor
+
+    private var high: Double? { monitor.reading.flatMap { HealthCoach.timeAtHighCharge(monitor.history.points, now: $0.at) } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Health coach").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+            StatRow(label: "Time at 95 %+, last 3 days", value: high.map { "\(Int(($0 * 100).rounded()))% of the time" } ?? "Needs a day of data",
+                    help: "Sitting full on the charger is the habit that ages a lithium battery fastest. Under a quarter is easy on it.")
+            StatRow(label: "Cycles per week", value: HealthCoach.cyclesPerWeek(monitor.history.days).map { String(format: "%.1f", $0) } ?? "Needs a week of data",
+                    help: "Full charge–discharge cycles, from JuiceLeft's daily log. The battery is designed for 1,000.")
+            StatRow(label: "Health trend", value: HealthCoach.healthTrendPerMonth(monitor.history.days).map { String(format: "%+.1f%% a month", $0) } ?? "Needs a few weeks of data",
+                    help: "A straight line through the daily health figures, once there are three weeks of them.")
+            if let high, high >= HealthCoach.storageShare {
+                Text("Leaving it for a while? A battery stored at around 50 % keeps best.").font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if ChargeLimit.supported, let limit = monitor.chargeLimit, !limit.enabled || limit.limit > ChargeLimit.recommended {
+                HStack(spacing: 8) {
+                    Text("An 80 % limit is the kindest everyday setting.").font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 6)
+                    Button("Set 80%") { monitor.setChargeLimit(ChargeLimit.recommended) }.controlSize(.small)
+                        .help("macOS's own Charge Limit, the one in System Settings › Battery. It still tops up to 100 % now and then to keep the gauge honest.")
+                }
+            }
+        }
+    }
+}
+
+/// Stretch the battery: the two automatic helpers, the charge limit and the heat guard.
+struct StretchCard: View {
+    @ObservedObject var monitor: Monitor
+    @AppStorage("stretchExpanded") private var expanded = false
+
+    init(monitor: Monitor) {
+        self.monitor = monitor
+        _expanded = AppStorage(wrappedValue: false, "stretchExpanded", store: monitor.defaults)
+    }
+
+    private var summary: String {
+        var parts: [String] = []
+        if monitor.s.smartLowPower { parts.append("Smart Low Power") }
+        if monitor.s.brightnessCap { parts.append("Screen ≤ \(Int((monitor.s.brightnessCapLevel * 100).rounded()))%") }
+        if let limit = monitor.chargeLimit, limit.enabled { parts.append("Charge to \(limit.limit)%") }
+        if monitor.travelFull != nil { parts.append("Full for travel") }
+        return parts.isEmpty ? "Nothing automatic" : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Card(title: "Stretch the battery", subtitle: summary, symbol: "leaf.fill", tint: .green,
+             lit: monitor.s.smartLowPower || monitor.s.brightnessCap || (monitor.chargeLimit?.enabled ?? false),
+             expanded: $expanded, help: "Things JuiceLeft can do by itself to make a charge last, and to make the battery last.", trailing: { EmptyView() }) {
+            Divider()
+            SwitchRow(title: "Smart Low Power", subtitle: PowerMode.helperReady ? "Low Power Mode by itself at \(SmartLowPower.level)% or under an hour left; the old mode is back on the charger"
+                                                                              : "At \(SmartLowPower.level)% or under an hour left. Set an energy mode above once to install the helper it needs",
+                      help: "Uses the energy-mode helper (installed once with your password, the first time a mode is set). Change the mode by hand and JuiceLeft stands back until the next charge.",
+                      isOn: $monitor.s.smartLowPower)
+            SwitchRow(title: "Keep the screen at or below", subtitle: "On battery, and never turned up",
+                      help: "Turns the built-in screen down to the cap whenever it is brighter on battery, and puts it back on the charger.",
+                      isOn: $monitor.s.brightnessCap)
+            if monitor.s.brightnessCap {
+                HStack(spacing: 8) {
+                    Text("Cap").font(.callout).frame(width: 92, alignment: .leading)
+                    Slider(value: $monitor.s.brightnessCapLevel, in: 0.2...0.8, step: 0.05) { Text("Cap") }.labelsHidden().controlSize(.small)
+                        .accessibilityValue("\(Int((monitor.s.brightnessCapLevel * 100).rounded())) percent")
+                    Text("\(Int((monitor.s.brightnessCapLevel * 100).rounded()))%").font(.callout).monospacedDigit().frame(width: 38, alignment: .trailing)
+                }
+            }
+            if ChargeLimit.supported {
+                ChargeLimitRows(monitor: monitor)
+            } else if #available(macOS 26.4, *) {
+                HStack {
+                    Text("Charge limit").font(.callout)
+                    Spacer()
+                    Button("Open Battery Settings…") { SystemBattery.openBatterySettings() }.controlSize(.small)
+                        .help("macOS didn't offer its Charge Limit to JuiceLeft on this Mac; System Settings › Battery has it.")
+                }
+            }
+            SwitchRow(title: "Heat guard", subtitle: "A nudge at 35 °C on the charger or 40 °C on battery",
+                      help: "Shows what to do when the battery pack runs hot — heat ages it faster than anything. A notification too, when notifications are on.",
+                      isOn: $monitor.s.heatGuard)
+        }
+    }
+}
+
+/// macOS's own Charge Limit, and one tap to fill up for a trip.
+struct ChargeLimitRows: View {
+    @ObservedObject var monitor: Monitor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Charge limit").font(.callout)
+                    Text(monitor.chargeLimit.map { $0.enabled ? "Stops charging at \($0.limit)%; 80% is kindest for everyday use" : "Off: charges to 100%; 80% is kindest for everyday use" } ?? "Reading…")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 6)
+                Picker("Charge limit", selection: Binding(get: { monitor.chargeLimit?.limit ?? 100 }, set: { monitor.setChargeLimit($0) })) {
+                    ForEach(monitor.chargeLimit?.available ?? ChargeLimit.steps, id: \.self) { Text($0 == 100 ? "Off" : "\($0)%").tag($0) }
+                }
+                .labelsHidden().fixedSize()
+                .disabled(monitor.chargeLimit == nil)
+                .help("macOS's own Charge Limit (System Settings › Battery). The firmware holds it, and still tops up to 100 % occasionally so the gauge stays accurate. macOS allows 80 % to 100 %.")
+            }
+            if let limit = monitor.chargeLimit, limit.enabled {
+                HStack(spacing: 8) {
+                    if let since = monitor.travelFull {
+                        Label("Charging to full once (since \(Format.clock(since)))", systemImage: "airplane").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Cancel") { monitor.cancelFullForTravel() }.controlSize(.small)
+                            .help("Put the \(monitor.chargeLimit?.limit ?? 80)% limit back now.")
+                    } else {
+                        Text("Going somewhere?").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Full for travel") { monitor.fullForTravel() }.controlSize(.small)
+                            .help("Let it charge to 100 % this once. The limit comes back by itself after the next unplug, or after a day on the charger.")
+                    }
+                }
             }
         }
     }

@@ -160,10 +160,11 @@ enum LoginItem {
 enum Format {
     static func clock(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
 
-    /// "2 h 10 m", "45 min".
+    /// "2 h 10 m", "2 h", "45 min".
     static func duration(_ minutes: Int) -> String {
         let m = max(minutes, 0)
-        return m >= 60 ? "\(m / 60) h \(m % 60) m" : "\(m) min"
+        guard m >= 60 else { return "\(m) min" }
+        return m % 60 == 0 ? "\(m / 60) h" : "\(m / 60) h \(m % 60) m"
     }
 
     /// VoiceOver-friendly: "2 hours 10 minutes".
