@@ -3,7 +3,7 @@
 Thanks for your interest in JuiceLeft!
 
 - **Bug reports and feature ideas are welcome** — please open an issue at
-  <https://github.com/CyborgFingers/JuiceLeft/issues> with your macOS version, what you did and what happened.
+  <https://github.com/Weta-Technologies/JuiceLeft/issues> with your macOS version, what you did and what happened.
 - **Pull requests and code contributions are not accepted.** JuiceLeft is proprietary freeware (all rights reserved, see
   LICENSE), so outside code can't be merged.
 - **Security problems:** please follow SECURITY.md instead of opening a public issue.

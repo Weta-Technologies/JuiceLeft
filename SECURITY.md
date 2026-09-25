@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security problems **privately**: on GitHub, open the repository's **Security** tab and choose
-**Report a vulnerability** (<https://github.com/CyborgFingers/JuiceLeft/security/advisories/new>). Don't open a public issue
+**Report a vulnerability** (<https://github.com/Weta-Technologies/JuiceLeft/security/advisories/new>). Don't open a public issue
 for a security problem.
 
 Include what you found, how to reproduce it, and the JuiceLeft and macOS versions. You'll get an acknowledgement as soon as
@@ -25,7 +25,7 @@ If a copy is signed by anyone else, don't run it, and please report where you fo
 
 ## Supported versions
 
-Only the latest release on <https://github.com/CyborgFingers/JuiceLeft/releases> receives security fixes.
+Only the latest release on <https://github.com/Weta-Technologies/JuiceLeft/releases> receives security fixes.
 
 ## Scope
 

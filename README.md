@@ -6,12 +6,12 @@
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-0E4F4E">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-1C7A73">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-FFB23E">
-  <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?color=1C7A73&label=release"></a>
+  <a href="https://github.com/Weta-Technologies/JuiceLeft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Weta-Technologies/JuiceLeft?color=1C7A73&label=release"></a>
   <a href="LICENSE"><img alt="Freeware, all rights reserved" src="https://img.shields.io/badge/license-freeware%20%C2%B7%20all%20rights%20reserved-B9F26A"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg"><img alt="Download JuiceLeft for Mac" src="https://img.shields.io/github/v/release/CyborgFingers/JuiceLeft?style=for-the-badge&label=Download%20for%20Mac&color=FFB23E"></a>
+  <a href="https://github.com/Weta-Technologies/JuiceLeft/releases/latest/download/JuiceLeft.pkg"><img alt="Download JuiceLeft for Mac" src="https://img.shields.io/github/v/release/Weta-Technologies/JuiceLeft?style=for-the-badge&label=Download%20for%20Mac&color=FFB23E"></a>
   <br>
   <sub>macOS 13+ · Apple Silicon · free · made by <a href="https://github.com/CyborgFingers">CyborgFingers</a></sub>
 </p>
@@ -132,7 +132,7 @@ The one-line summary under the panel header is always generated from JuiceLeft's
 
 ### Download (easiest)
 
-1. **[Download JuiceLeft.pkg](https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg)** — always the latest release ([all releases](https://github.com/CyborgFingers/JuiceLeft/releases)).
+1. **[Download JuiceLeft.pkg](https://github.com/Weta-Technologies/JuiceLeft/releases/latest/download/JuiceLeft.pkg)** — always the latest release ([all releases](https://github.com/Weta-Technologies/JuiceLeft/releases)).
 2. Open it: **Continue**, **Agree** to the licence, **Install**. macOS asks for your password or Touch ID **once**: that puts JuiceLeft into Applications and sets up its helper, and JuiceLeft opens in your menu bar — in Apple's battery spot — with energy modes and the charging light ready. Nothing asks again — not the app, and not later updates.
 
    The package and the app are Developer ID signed and notarized by Apple (the official builds are signed and notarized by Weta Technologies Limited — see [SECURITY.md](SECURITY.md) for how to check a download), so there is no Gatekeeper step and the app opens without a warning. Requires an Apple Silicon Mac with a battery running macOS 13 or later. Running the package again over an installed JuiceLeft (or a newer one) simply upgrades it; your settings and what it has learned are kept. (The 1.0 release was an unsigned drag-to-Applications DMG: if you still have that one, macOS 15 and later make you allow it under *System Settings → Privacy & Security → Open Anyway* — the package replaces it, and does not.)
@@ -142,7 +142,7 @@ The one-line summary under the panel header is always generated from JuiceLeft's
 You need Xcode or the Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/CyborgFingers/JuiceLeft.git
+git clone https://github.com/Weta-Technologies/JuiceLeft.git
 cd JuiceLeft
 ./build.sh install   # builds build/JuiceLeft.app, copies it to /Applications and launches it
 ```
@@ -260,7 +260,7 @@ JuiceLeft is an independent implementation with no code or artwork copied from a
 
 **JuiceLeft is copyright © 2026 Weta Technologies Limited. All rights reserved. Developed by Weta Technologies Limited · GitHub: [CyborgFingers](https://github.com/CyborgFingers).**
 
-JuiceLeft is **freeware**: you may download and use it free of charge on any Macs you own or control, for personal or business use. You may not modify, decompile, redistribute, sell or host it; please share the [official download](https://github.com/CyborgFingers/JuiceLeft/releases/latest) instead. The source is published so you can see exactly what JuiceLeft does. It is not open source, and viewing it gives no rights beyond the licence. The installer asks you to accept the licence before installing.
+JuiceLeft is **freeware**: you may download and use it free of charge on any Macs you own or control, for personal or business use. You may not modify, decompile, redistribute, sell or host it; please share the [official download](https://github.com/Weta-Technologies/JuiceLeft/releases/latest) instead. The source is published so you can see exactly what JuiceLeft does. It is not open source, and viewing it gives no rights beyond the licence. The installer asks you to accept the licence before installing.
 
 - [Licence agreement](LICENSE) (governed by New Zealand law)
 - [Privacy policy](PRIVACY.md): JuiceLeft collects nothing, and its Apple Intelligence tips run on your Mac

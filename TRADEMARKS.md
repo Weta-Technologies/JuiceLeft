@@ -8,8 +8,8 @@ people can trust that what they download is the real thing.
 ## You may
 
 - Refer to JuiceLeft by name in articles, reviews, videos, tutorials and social posts.
-- Link to the official page, <https://cyborgfingers.github.io/JuiceLeft/>, or the official releases,
-  <https://github.com/CyborgFingers/JuiceLeft/releases>.
+- Link to the official page, <https://weta-technologies.github.io/JuiceLeft/>, or the official releases,
+  <https://github.com/Weta-Technologies/JuiceLeft/releases>.
 - Use the unmodified logo next to such a link or review.
 
 ## You may not
@@ -24,4 +24,4 @@ people can trust that what they download is the real thing.
 
 Apple, Mac, macOS, MagSafe and Apple Intelligence are trademarks of Apple Inc., registered in the U.S. and other countries and regions. JuiceLeft is not affiliated with, sponsored by or endorsed by Apple Inc. Other product and company names mentioned are trademarks of their respective owners.
 
-Questions: open an issue at <https://github.com/CyborgFingers/JuiceLeft/issues>.
+Questions: open an issue at <https://github.com/Weta-Technologies/JuiceLeft/issues>.

@@ -5,7 +5,7 @@ import SwiftUI
 import UserNotifications
 
 /// Automatic updates from the app's GitHub releases — one file, the same in every CyborgFingers app. Everything
-/// per-app comes from the bundle: name, version and bundle id (the repo is CyborgFingers/<name>).
+/// per-app comes from the bundle: name, version and bundle id (the repo is Weta-Technologies/<name>).
 ///
 /// Checking: GET api.github.com/repos/<repo>/releases/latest (ETag-cached, 15 s timeout), first about 10 s after
 /// launch and then once a day while "Check for updates automatically" is on, or from the Check for Updates button.
@@ -107,8 +107,8 @@ import UserNotifications
         appName = info["CFBundleName"] as? String ?? "App"
         bundleID = Bundle.main.bundleIdentifier ?? "io.github.cyborgfingers.\(appName.lowercased())"
         currentVersion = Version(info["CFBundleShortVersionString"] as? String ?? "") ?? Version("0")!
-        pageURL = URL(string: "https://github.com/CyborgFingers/\(appName)/releases/latest")!
-        licenceURL = URL(string: "https://github.com/CyborgFingers/\(appName)/blob/main/LICENSE")!
+        pageURL = URL(string: "https://github.com/Weta-Technologies/\(appName)/releases/latest")!
+        licenceURL = URL(string: "https://github.com/Weta-Technologies/\(appName)/blob/main/LICENSE")!
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--update-test"), i + 2 < args.count, let url = URL(string: args[i + 1]), let key = Data(base64Encoded: args[i + 2]) {
             testRun = true
@@ -118,7 +118,7 @@ import UserNotifications
             defaults = UserDefaults(suiteName: bundleID + ".update-test")!
         } else {
             testRun = false
-            feed = URL(string: "https://api.github.com/repos/CyborgFingers/\(appName)/releases/latest")!
+            feed = URL(string: "https://api.github.com/repos/Weta-Technologies/\(appName)/releases/latest")!
             key = Data(base64Encoded: Self.publisherKey)!
             testLog = nil
             defaults = .standard
@@ -445,7 +445,7 @@ import UserNotifications
         check(Version("1.2.0-beta.1") == nil && Version("nightly") == nil && Version("") == nil && Version("1..2") == nil, "pre-releases and junk don't parse")
 
         let feed = """
-        {"tag_name":"v1.2.0","draft":false,"prerelease":false,"html_url":"https://github.com/CyborgFingers/App/releases/tag/v1.2.0","body":"## New\\n- a thing",
+        {"tag_name":"v1.2.0","draft":false,"prerelease":false,"html_url":"https://github.com/Weta-Technologies/App/releases/tag/v1.2.0","body":"## New\\n- a thing",
          "assets":[{"name":"App.dmg","browser_download_url":"https://x/App.dmg"},{"name":"App.app.zip","browser_download_url":"https://x/App.app.zip"},
                    {"name":"App.app.zip.sig","browser_download_url":"https://x/App.app.zip.sig"}]}
         """

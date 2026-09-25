@@ -103,7 +103,7 @@ if ! [[ -f build/RELEASE_NOTES.md && $DRY = 0 ]] || ! head -n 1 build/RELEASE_NO
     echo "### Install or update"
     echo "New here: download **$APP.pkg** and open it — Continue, Agree, Install (your password or Touch ID, once) — and $APP opens in the"
     echo "menu bar with its helper set up. Already running $APP: click **Update Now** in the panel (or run the package). Your settings are kept."
-    echo "By installing or updating you accept the [$APP licence](https://github.com/CyborgFingers/$APP/blob/main/LICENSE)."
+    echo "By installing or updating you accept the [$APP licence](https://github.com/Weta-Technologies/$APP/blob/main/LICENSE)."
     echo
     echo '```'
     cat build/SHA256SUMS.txt
@@ -122,5 +122,5 @@ git add Info.plist docs/index.html
 git commit -q -m "release: $APP $VERSION"
 git tag -a "v$VERSION" -m "$APP $VERSION"
 git push origin HEAD --tags
-gh release create "v$VERSION" "build/$APP.pkg" "build/$APP.app.zip" "build/$APP.app.zip.sig" --title "$APP $VERSION" --notes-file build/RELEASE_NOTES.md
-echo "Published https://github.com/CyborgFingers/$APP/releases/tag/v$VERSION"
+gh release create --repo "Weta-Technologies/$APP" "v$VERSION" "build/$APP.pkg" "build/$APP.app.zip" "build/$APP.app.zip.sig" --title "$APP $VERSION" --notes-file build/RELEASE_NOTES.md
+echo "Published https://github.com/Weta-Technologies/$APP/releases/tag/v$VERSION"

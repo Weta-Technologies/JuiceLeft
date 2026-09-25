@@ -92,11 +92,11 @@ struct Panel: View {
             UpdateRows(updater: .shared)
             VStack(spacing: 2) {
                 HStack(spacing: 4) {
-                    Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · by")
+                    Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · GitHub:")
                     Link("CyborgFingers", destination: URL(string: "https://github.com/CyborgFingers")!)
-                        .help("github.com/CyborgFingers — source, releases and issues at github.com/CyborgFingers/JuiceLeft")
+                        .help("github.com/CyborgFingers — source, releases and issues at github.com/Weta-Technologies/JuiceLeft")
                     Text("·")
-                    Link("Licence", destination: URL(string: "https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE")!)
+                    Link("Licence", destination: URL(string: "https://github.com/Weta-Technologies/JuiceLeft/blob/main/LICENSE")!)
                         .help("The JuiceLeft licence agreement and privacy policy (JuiceLeft collects nothing).")
                 }
                 Text("© 2026 Weta Technologies Limited · All rights reserved")

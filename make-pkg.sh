@@ -1,6 +1,6 @@
 #!/bin/bash
 # ./make-pkg.sh  ->  build/JuiceLeft.pkg, the Installer package attached to GitHub releases.
-# Keep the asset name fixed: https://github.com/CyborgFingers/JuiceLeft/releases/latest/download/JuiceLeft.pkg
+# Keep the asset name fixed: https://github.com/Weta-Technologies/JuiceLeft/releases/latest/download/JuiceLeft.pkg
 # (the download button) always serves the newest release.
 #
 # One package, three clicks — Continue, Agree, Install. The app goes into /Applications; pkg/scripts/preinstall quits a

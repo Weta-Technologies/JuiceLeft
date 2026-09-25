@@ -109,11 +109,11 @@ over any dispute arising out of or in connection with it.
 
 17. CHANGES TO THIS AGREEMENT
 Weta Technologies may update this agreement at any time. The current version is always published at
-https://github.com/CyborgFingers/JuiceLeft/blob/main/LICENSE, and each release of the Software includes the version in
-force when it was released. Updated terms apply to versions released after they are published and, where applicable
-law allows, to your continued use of earlier versions 30 days after publication. An update will never take away your
-right to keep using, free of charge, a version you received free of charge. If you do not accept an update, stop using
-the Software.
+https://github.com/Weta-Technologies/JuiceLeft/blob/main/LICENSE, and each release of the Software includes the
+version in force when it was released. Updated terms apply to versions released after they are published and, where
+applicable law allows, to your continued use of earlier versions 30 days after publication. An update will never take
+away your right to keep using, free of charge, a version you received free of charge. If you do not accept an update,
+stop using the Software.
 
 18. GENERAL
 If any provision of this agreement is found unenforceable, it will be enforced to the maximum extent permissible and
@@ -127,7 +127,7 @@ License v3.0. Anyone who received that version keeps the rights that licence gav
 every later version.
 
 20. CONTACT
-Questions about this agreement: open an issue at https://github.com/CyborgFingers/JuiceLeft/issues
+Questions about this agreement: open an issue at https://github.com/Weta-Technologies/JuiceLeft/issues
 Security reports: see SECURITY.md.
 
 Last updated: 26 September 2026. 

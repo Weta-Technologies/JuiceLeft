@@ -40,4 +40,4 @@ that release's notes.
 
 ## Contact
 
-Open an issue at <https://github.com/CyborgFingers/JuiceLeft/issues>.
+Open an issue at <https://github.com/Weta-Technologies/JuiceLeft/issues>.
