@@ -45,18 +45,25 @@ func drawIcon(_ ctx: CGContext, _ s: CGFloat) {
     ctx.addPath(shape); ctx.setFillColor(srgb(0x0B2F33)); ctx.fillPath()
     ctx.restoreGState()
 
+    // The battery: the glyph's 14 × 8 body with its 2.2 corner, at 588 × 336, stroked in cream; the terminal on the right.
+    // Centred on the tile as a whole — outline plus terminal — so the terminal doesn't push it off to the left.
+    let stroke: CGFloat = 40, terminalGap: CGFloat = 26, terminalWidth: CGFloat = 50
+    let battSize = CGSize(width: 588, height: 336)
+    let groupWidth = stroke + battSize.width + terminalGap + terminalWidth
+    let batt = CGRect(x: body.midX - groupWidth / 2 + stroke / 2, y: body.midY - battSize.height / 2,
+                      width: battSize.width, height: battSize.height)
+    let corner = batt.height * 2.2 / 8
+
     ctx.saveGState()
     ctx.addPath(shape); ctx.clip()
 
     // Deep teal, lighter at the top, and a lime glow behind the juice.
     ctx.drawLinearGradient(gradient([(0, srgb(tealLight)), (0.55, srgb(teal)), (1, srgb(tealDeep))]),
                            start: CGPoint(x: 512, y: body.maxY), end: CGPoint(x: 512, y: body.minY), options: [])
+    let glow = CGPoint(x: batt.midX - 20, y: batt.midY)
     ctx.drawRadialGradient(gradient([(0, srgb(lime, 0.34)), (1, srgb(lime, 0))]),
-                           startCenter: CGPoint(x: 440, y: 512), startRadius: 0, endCenter: CGPoint(x: 440, y: 512), endRadius: 440, options: [])
+                           startCenter: glow, startRadius: 0, endCenter: glow, endRadius: 440, options: [])
 
-    // The battery: the glyph's 14 × 8 body with its 2.2 corner, at 588 × 336, stroked in cream; the terminal on the right.
-    let batt = CGRect(x: 166, y: 344, width: 588, height: 336)
-    let stroke: CGFloat = 40, corner = batt.height * 2.2 / 8
     let inner = batt.insetBy(dx: stroke / 2 + 26, dy: stroke / 2 + 26)
     let innerCorner = corner - stroke / 2 - 26 + 22
 
@@ -124,7 +131,7 @@ func drawIcon(_ ctx: CGContext, _ s: CGFloat) {
     ctx.setStrokeColor(srgb(cream)); ctx.setLineWidth(stroke)
     ctx.addPath(CGPath(roundedRect: batt, cornerWidth: corner, cornerHeight: corner, transform: nil)); ctx.strokePath()
     ctx.setFillColor(srgb(cream))
-    ctx.addPath(CGPath(roundedRect: CGRect(x: batt.maxX + stroke / 2 + 26, y: batt.midY - 59, width: 50, height: 118), cornerWidth: 18, cornerHeight: 18, transform: nil)); ctx.fillPath()
+    ctx.addPath(CGPath(roundedRect: CGRect(x: batt.maxX + stroke / 2 + terminalGap, y: batt.midY - 59, width: terminalWidth, height: 118), cornerWidth: 18, cornerHeight: 18, transform: nil)); ctx.fillPath()
     ctx.restoreGState()
     ctx.restoreGState()
 
