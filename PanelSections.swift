@@ -336,19 +336,30 @@ struct ChargingCard: View {
 struct GeneralRows: View {
     @ObservedObject var monitor: Monitor
 
+    private var menuBarExample: String {
+        switch monitor.s.menuBar {
+        case .icon: return "the battery alone"
+        case .percent: return "84% and the battery, Apple's look"
+        case .compact: return "84% · battery · 2:10"
+        case .words: return "84% · battery · 2 Hours 10 Min Remaining"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Menu bar").font(.callout)
-                Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("Menu bar shows").font(.callout)
+                    Text(menuBarExample).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
                 Picker("Menu bar shows", selection: $monitor.s.menuBar) {
                     Text("Icon").tag(Settings.MenuBar.icon)
                     Text("Percent").tag(Settings.MenuBar.percent)
                     Text("Compact").tag(Settings.MenuBar.compact)
                     Text("Words").tag(Settings.MenuBar.words)
                 }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The tooltip and VoiceOver always have the whole story.")
+                .pickerStyle(.segmented).labelsHidden()
+                .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
             }
             SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
                       help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
