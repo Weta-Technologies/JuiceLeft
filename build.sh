@@ -20,6 +20,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/"
 cp juiceleft-helper.sh "$APP/Contents/Resources/"
+cc -O2 -Wall -Wextra -Werror -target arm64-apple-macos13.0 -framework IOKit -framework CoreFoundation juiceleft-led.c -o "$APP/Contents/Resources/juiceleft-led"
 [[ -f assets/AppIcon.icns ]] && cp assets/AppIcon.icns "$APP/Contents/Resources/"
 # FoundationModels (Apple Intelligence, macOS 26+) is weak-linked so the app still launches on macOS 13–15.
 swiftc -O -parse-as-library -target arm64-apple-macosx13.0 \

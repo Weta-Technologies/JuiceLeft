@@ -21,6 +21,10 @@ struct Settings: Codable, Equatable {
     var brightnessCap = false    // keep the screen at or below `brightnessCapLevel` on battery
     var brightnessCapLevel = 0.5
     var heatGuard = true         // a nudge when the pack runs hot
+    var light = true             // drive the MagSafe charging light
+    var lightBehaviour = MagSafeLight.Behaviour.blinkThenSteady
+    var lightGreenAtLimit = true // green when full or held at the charge limit
+    var lightFastWhenLow = true  // fast orange blink while charging from at or below the alert level
 
     static let key = "settings"
 
@@ -135,6 +139,7 @@ struct History: Codable, Equatable {
     @Published private(set) var smartApplied = false            // Smart Low Power has the mode
     var interactive = true                                      // false = never raise the helper's admin prompt (harness, selftest, --simulate)
     let icon = MenuIcon()
+    let light = LightController()
     let tone = Tone()
     let energy = EnergyMeter()
     let insight = Insight()
@@ -188,10 +193,14 @@ struct History: Codable, Equatable {
             if !defaults.bool(forKey: "welcomed") { defaults.set(true, forKey: "welcomed"); welcome = true }
         }
         source.onReading = { [weak self] reading in MainActor.assumeIsolated { self?.ingest(reading) } }
+        light.refresh = { [weak self] in self?.evaluate() }
+        light.log = { [weak self] line in self?.log?(line) }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.persist(force: true)
-                if let self, self.s.replaceSystemIcon { SystemBattery.restore(from: self.defaults) }
+                guard let self else { return }
+                self.persist(force: true)
+                if self.s.replaceSystemIcon { SystemBattery.restore(from: self.defaults) }
+                self.light.handBack(onAC: self.reading?.onAC ?? false, charging: self.reading?.charging ?? false)
             }
         }
     }
@@ -225,6 +234,12 @@ struct History: Codable, Equatable {
     func testTone() { tone.play(s.tone, volume: s.volume) }
 
     func dismissWelcome() { welcome = false }
+
+    /// The friendly moment for the helper's admin prompt: the user clicked "Set up" for the charging light.
+    func setUpLight() {
+        note = PowerMode.installHelper().map { "The helper didn't install: \($0)" }
+        evaluate()
+    }
 
     // MARK: Save Battery
 
@@ -532,6 +547,8 @@ struct History: Codable, Equatable {
                                    charging: r.charging, minutes: minutes)
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
         care(r)
+        light.update(enabled: s.light, onAC: r.onAC, charging: r.charging && !r.full, percent: r.percent, alertAt: s.alertAt,
+                     behaviour: s.lightBehaviour, greenAtLimit: s.lightGreenAtLimit, fastWhenLow: s.lightFastWhenLow, now: r.at)
         insight.update(facts, ai: s.insight)
     }
 
@@ -542,6 +559,7 @@ struct History: Codable, Equatable {
 
     /// The charger went in or out: everything automatic steps back.
     private func plugEdge(_ r: Reading) {
+        light.plugChanged(onAC: r.onAC, at: r.at)
         if r.onAC {
             if saving != nil { undoSaveBattery() }
             if smartApplied { _ = requestPowerMode(smartPrevious ?? .automatic, onBattery: true, reason: "smart low power, charger in"); smartApplied = false }

@@ -321,6 +321,32 @@ import SwiftUI
     careDefaults.removePersistentDomain(forName: careSuite)
     try? FileManager.default.removeItem(at: careURL)
 
+    // The charging light's rules and request lines.
+    var li = MagSafeLight.Inputs(onMagSafe: true, charging: true, percent: 50, secondsSincePlug: 3)
+    check(MagSafeLight.desired(li) == .slowBlink, "light: slow blink right after plugging in")
+    li.secondsSincePlug = 12
+    check(MagSafeLight.desired(li) == .orange, "light: steady orange after ten seconds")
+    li.behaviour = .blink
+    check(MagSafeLight.desired(li) == .slowBlink, "light: blink throughout")
+    li.behaviour = .apple
+    check(MagSafeLight.desired(li) == nil, "light: Apple's default leaves it alone")
+    li.percent = 8
+    check(MagSafeLight.desired(li) == .fastBlink, "light: fast blink at or below the alert level, whatever the behaviour")
+    li.fastWhenLow = false
+    check(MagSafeLight.desired(li) == nil, "light: fast blink can be turned off")
+    li = MagSafeLight.Inputs(onMagSafe: true, charging: false, percent: 80)
+    check(MagSafeLight.desired(li) == .green, "light: green when held at the limit or full")
+    li.greenAtLimit = false
+    check(MagSafeLight.desired(li) == nil, "light: green can be turned off")
+    li = MagSafeLight.Inputs(onMagSafe: true, charging: true, percent: 50, secondsSincePlug: 30, lidClosed: true)
+    check(MagSafeLight.desired(li) == nil, "light: never driven with the lid closed")
+    li.lidClosed = false; li.onMagSafe = false
+    check(MagSafeLight.desired(li) == nil, "light: not through USB-C")
+    li.onMagSafe = true; li.enabled = false
+    check(MagSafeLight.desired(li) == nil, "light: switched off")
+    check(MagSafeLight.request(.slowBlink, onAC: true, charging: true) == "6" && MagSafeLight.request(nil, onAC: true, charging: true) == "4 0"
+          && MagSafeLight.request(nil, onAC: true, charging: false) == "3 0" && MagSafeLight.request(nil, onAC: false, charging: false) == "0", "light: request lines, hand-back writes the colour first")
+
     // Click decision: quick press or right/⌃-click = panel, held past the deadline = toggle monitoring.
     check(StatusItemController.gesture(.leftMouseDown, control: false) { true } == .panel, "quick press opens the panel")
     check(StatusItemController.gesture(.leftMouseDown, control: false) { false } == .toggle, "hold toggles")
@@ -341,6 +367,7 @@ import SwiftUI
     check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%", trailing: "2 Hours 10 Min Remaining")).size.width > MenuIcon.glyphWidth + 120, "the words make room after the glyph")
 
     let r = reading!
+    print("MagSafe port: \(MagSafePort.exists ? "present" : "none"), power through it now: \(MagSafePort.active), lid closed: \(Lid.read())")
     print("PASS: alert rules, forecast + learning (priors \(String(format: "%.1f", morning.rate))/\(String(format: "%.1f", evening.rate)) → \(String(format: "%.1f", evening2.rate)) %/h, miss \(String(format: "%.0f", (learner.relativeError ?? 0) * 100))%), settings, apps, gesture, glyphs; battery \(r.percent)% \(r.onAC ? "on power" : "on battery"), health \(r.health.map { String(format: "%.0f%%", $0) } ?? "?"), \(r.cycles ?? 0) cycles; Apple Intelligence \(AppleIntelligence.available ? "available" : "not available")")
     exit(0)
 }

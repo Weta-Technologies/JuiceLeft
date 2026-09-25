@@ -499,6 +499,7 @@ struct ChargingCard: View {
         if monitor.s.unplugReminder { parts.append("Unplug at \(Monitor.unplugAt)%") }
         if monitor.s.fullNotice { parts.append("Full notice") }
         if monitor.s.plugNotices { parts.append("Plug in/out") }
+        if monitor.light.available, monitor.s.light { parts.append("MagSafe light") }
         return parts.isEmpty ? "No reminders" : parts.joined(separator: " · ")
     }
 
@@ -512,6 +513,7 @@ struct ChargingCard: View {
             SwitchRow(title: "Tell me when it's full", help: "A notification when the battery reports fully charged.", isOn: $monitor.s.fullNotice)
             SwitchRow(title: "Charger plugged in or out", subtitle: "Which charger, and the time to flat when unplugged",
                       help: "A notification on every plug and unplug.", isOn: $monitor.s.plugNotices)
+            if monitor.light.available { LightRows(monitor: monitor, light: monitor.light) }
         }
     }
 }
@@ -551,6 +553,49 @@ struct GeneralRows: View {
             if AppleIntelligence.available {
                 SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line on this Mac; the numbers are always JuiceLeft's",
                           help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)
+            }
+        }
+    }
+}
+
+/// The MagSafe charging light: what it does while charging, when it goes green, and the fast blink when low.
+struct LightRows: View {
+    @ObservedObject var monitor: Monitor
+    @ObservedObject var light: LightController
+
+    private var status: String {
+        if !light.onMagSafe { return monitor.reading?.onAC == true ? "Charging through USB-C: no light to drive" : "Shows while charging through MagSafe" }
+        if light.needsSetup { return "Needs a one-time setup" }
+        return light.holding.map { "MagSafe · now \($0.name)" } ?? "MagSafe · macOS's own colours"
+    }
+
+    var body: some View {
+        Divider()
+        SwitchRow(title: "Charging light", subtitle: status,
+                  help: "The MagSafe light, driven by the hardware itself (no cost): orange patterns while charging, green when full or held at the charge limit. Off leaves it to macOS. Never touched while the lid is closed — SleepLess has it then.",
+                  isOn: $monitor.s.light)
+        if monitor.s.light {
+            HStack(spacing: 8) {
+                Text("While charging").font(.callout).frame(width: 110, alignment: .leading)
+                Picker("While charging", selection: $monitor.s.lightBehaviour) {
+                    ForEach(MagSafeLight.Behaviour.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .labelsHidden().fixedSize()
+                .help("Blink, then steady: a slow orange blink for ten seconds after plugging in, then steady orange. Blink: the slow blink the whole time. Apple's default: orange as macOS does it.")
+                Spacer()
+            }
+            SwitchRow(title: "Green when full or at the charge limit", subtitle: "macOS leaves it orange at a limit; this fixes that",
+                      help: "Whenever the charger is in and the battery isn't taking charge.", isOn: $monitor.s.lightGreenAtLimit)
+            SwitchRow(title: "Fast blink when charging from \(monitor.s.alertAt)% or below",
+                      help: "A fast orange blink until the battery is above the tone level, then the pattern above.", isOn: $monitor.s.lightFastWhenLow)
+            if light.needsSetup {
+                HStack(spacing: 8) {
+                    Text("The light needs JuiceLeft's helper — your password, once.").font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 6)
+                    Button("Set up…") { monitor.setUpLight() }.controlSize(.small)
+                        .help("Installs (or updates) the small root helper that also sets energy modes. macOS asks for your password.")
+                }
             }
         }
     }
