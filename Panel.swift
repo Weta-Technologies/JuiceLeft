@@ -24,7 +24,18 @@ struct Panel: View {
         _tapHintSeen = AppStorage(wrappedValue: false, "tapHintSeen", store: monitor.defaults)
     }
 
+    /// The panel never outgrows the screen: past this it scrolls.
+    static var maxHeight: CGFloat { (NSScreen.main?.visibleFrame.height ?? 800) - 40 }
+
     var body: some View {
+        ScrollView {
+            content
+        }
+        .frame(width: 344)
+        .frame(maxHeight: Self.maxHeight)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
             StatusHeader(monitor: monitor)
             InsightLine(monitor: monitor, insight: monitor.insight)
@@ -64,7 +75,6 @@ struct Panel: View {
             .frame(maxWidth: .infinity)
         }
         .padding(14)
-        .frame(width: 344)
         .animation(reduceMotion ? nil : panelEase, value: monitor.note)
     }
 }
@@ -224,14 +234,10 @@ struct Card<Trailing: View, Rows: View>: View {
             HStack(spacing: 10) {
                 IconTile(symbol: symbol, tint: tint, lit: lit)
                 if let expanded {
-                    Button {
-                        withAnimation(reduceMotion ? nil : panelEase) { expanded.wrappedValue.toggle() }
-                    } label: {
+                    Button(action: { toggle(expanded) }) {
                         HStack(spacing: 6) {
                             titles
                             Spacer(minLength: 4)
-                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
                         }
                         .contentShape(Rectangle())
                     }
@@ -240,11 +246,20 @@ struct Card<Trailing: View, Rows: View>: View {
                     .accessibilityLabel("\(title): \(subtitle)")
                     .accessibilityValue(expanded.wrappedValue ? "expanded" : "collapsed")
                     .accessibilityAddTraits(.isButton)
+                    trailing
+                    Button(action: { toggle(expanded) }) {   // the chevron stays on the right edge, past any button
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
+                            .frame(width: 16, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHidden(true)
                 } else {
                     titles
                     Spacer(minLength: 8)
+                    trailing
                 }
-                trailing
             }
             if expanded?.wrappedValue ?? true { rows }
         }
@@ -252,6 +267,10 @@ struct Card<Trailing: View, Rows: View>: View {
         .background(shape.fill(lit ? Color.accentColor.opacity(0.10) : Color.primary.opacity(0.045)))
         .overlay(shape.strokeBorder(lit ? Color.accentColor.opacity(contrast == .increased ? 0.6 : 0.25)
                                         : Color.primary.opacity(contrast == .increased ? 0.4 : 0.08)))
+    }
+
+    private func toggle(_ expanded: Binding<Bool>) {
+        withAnimation(reduceMotion ? nil : panelEase) { expanded.wrappedValue.toggle() }
     }
 
     private var titles: some View {

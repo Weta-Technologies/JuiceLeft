@@ -1,16 +1,23 @@
 import SwiftUI
 
-/// The two levels, the tone, and what happens at each.
+/// The two levels, the tone, and what happens at each — behind a disclosure; the header line carries the state and,
+/// while the item is flashing or sounding, the Snooze button.
 struct AlertsCard: View {
     @ObservedObject var monitor: Monitor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("alertsExpanded") private var expanded = false
     private let repeats = [(0, "Once"), (2, "Every 2 min"), (5, "Every 5 min"), (10, "Every 10 min")]
+
+    init(monitor: Monitor) {
+        self.monitor = monitor
+        _expanded = AppStorage(wrappedValue: false, "alertsExpanded", store: monitor.defaults)
+    }
 
     private var animation: Animation? { reduceMotion ? nil : panelEase }
 
     private var subtitle: String {
         guard monitor.s.armed else { return "Off: nothing flashes or sounds" }
-        if let until = monitor.snoozedUntil { return "Snoozed until \(Format.clock(until))" }
+        if let until = monitor.snoozedUntil { return "Quiet until \(Format.clock(until))" }
         switch monitor.phase {
         case .alert: return "Sounding: at or below \(monitor.s.alertAt)%"
         case .warning: return "Flashing: at or below \(monitor.s.warnAt)%"
@@ -23,10 +30,16 @@ struct AlertsCard: View {
     }
 
     var body: some View {
-        Card(title: "Low-battery alerts", subtitle: subtitle, symbol: "bell.badge.fill", tint: .red, lit: monitor.s.armed, trailing: {
-            Toggle("Low-battery alerts", isOn: Binding(get: { monitor.s.armed }, set: { _ in withAnimation(animation) { monitor.toggleArmed() } }))
-                .labelsHidden().toggleStyle(.switch)
-                .help("The same switch as the header: everything on or off.")
+        Card(title: "Low-battery alerts", subtitle: subtitle, symbol: "bell.badge.fill", tint: .red, lit: monitor.s.armed,
+             expanded: $expanded, help: "The warning flash, the tone, and how they behave. Monitoring itself is the switch at the top.", trailing: {
+            if monitor.snoozedUntil != nil {
+                Button("Resume") { withAnimation(animation) { monitor.resume() } }.controlSize(.small)
+                    .help("Bring the flash and the tone back now.")
+            } else if monitor.phase != .clear {
+                Button("Snooze") { withAnimation(animation) { monitor.snooze() } }.controlSize(.small)
+                    .help("Quiet the flash and the tone for 30 minutes. They come back if the battery is still low.")
+                    .accessibilityLabel("Snooze alerts for 30 minutes")
+            }
         }) {
             Divider()
             LevelRow(title: "Flash red at", value: Binding(get: { monitor.s.warnAt }, set: { monitor.s.warnAt = $0 }), range: 5...50,
@@ -40,14 +53,18 @@ struct AlertsCard: View {
                 }
                 .labelsHidden().fixedSize()
                 .help("JuiceLeft's own chime, or one of macOS's alert sounds.")
-                Image(systemName: "speaker.wave.2").foregroundStyle(.secondary).imageScale(.small)
-                    .accessibilityHidden(true)
+                Button { monitor.testTone() } label: { Label("Test", systemImage: "play.fill") }
+                    .help("Play the tone once now, at this volume.")
+                    .accessibilityLabel("Test the tone")
+                Spacer()
+            }
+            HStack(spacing: 8) {
+                Text("Volume").font(.callout).frame(width: 92, alignment: .leading)
+                Image(systemName: "speaker.fill").foregroundStyle(.secondary).imageScale(.small).accessibilityHidden(true)
                 Slider(value: $monitor.s.volume, in: 0...1) { Text("Volume") }.labelsHidden().controlSize(.small)
                     .help("How loud, within the system volume.")
                     .accessibilityValue("\(Int((monitor.s.volume * 100).rounded())) percent")
-                Button { monitor.testTone() } label: { Image(systemName: "play.fill") }
-                    .help("Play the tone once now, at this volume.")
-                    .accessibilityLabel("Test the tone")
+                Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary).imageScale(.small).accessibilityHidden(true)
             }
             HStack(spacing: 8) {
                 Text("Repeat").font(.callout).frame(width: 92, alignment: .leading)
@@ -55,31 +72,12 @@ struct AlertsCard: View {
                     ForEach(repeats, id: \.0) { Text($0.1).tag($0.0) }
                 }
                 .labelsHidden().fixedSize()
-                .help("Play the tone again this often while the battery stays at or below the tone level.")
-                Text("until plugged in").font(.caption).foregroundStyle(.secondary)
+                .help("Play the tone again this often while the battery stays at or below the tone level, until the charger goes in.")
                 Spacer()
             }
             SwitchRow(title: "Notification", subtitle: notificationNote,
                       help: "Also post a macOS notification at each level, with the time to flat.",
                       isOn: $monitor.s.notify)
-            if monitor.phase != .clear || monitor.snoozedUntil != nil {
-                Divider()
-                HStack {
-                    if let until = monitor.snoozedUntil {
-                        Label("Quiet until \(Format.clock(until))", systemImage: "moon.zzz.fill").font(.callout)
-                        Spacer()
-                        Button("Resume") { withAnimation(animation) { monitor.resume() } }
-                            .help("Bring the flash and the tone back now.")
-                    } else {
-                        Label(monitor.phase == .alert ? "Sounding" : "Flashing", systemImage: monitor.phase == .alert ? "speaker.wave.3.fill" : "light.beacon.max.fill")
-                            .font(.callout).foregroundStyle(monitor.phase == .alert ? .red : .orange)
-                        Spacer()
-                        Button("Snooze 30 min") { withAnimation(animation) { monitor.snooze() } }
-                            .help("Stop the flash and the tone for 30 minutes. They come back if the battery is still low.")
-                    }
-                }
-                .transition(.opacity)
-            }
         }
         .animation(animation, value: monitor.phase)
     }
@@ -128,7 +126,7 @@ struct EnergyCard: View {
              }) {
             if !meter.apps.isEmpty {
                 Divider()
-                ForEach(meter.apps) { AppRow(app: $0, meter: meter) }
+                VStack(spacing: 6) { ForEach(meter.apps) { AppRow(app: $0, meter: meter) } }
             }
         }
         .help("Processor time is the best per-app proxy for battery use that a Mac exposes without root. System processes such as WindowServer aren't listed; Activity Monitor has them.")
@@ -148,8 +146,8 @@ struct AppRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(nsImage: EnergyMeter.icon(for: app)).frame(width: 20, height: 20).accessibilityHidden(true)
-            Text(app.name).font(.callout).lineLimit(1).truncationMode(.tail)
+            Image(nsImage: EnergyMeter.icon(for: app)).frame(width: 18, height: 18).accessibilityHidden(true)
+            Text(app.name).font(.callout).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 6)
             switch quitState {
             case "quitting":
@@ -332,7 +330,7 @@ struct GeneralRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Menu bar shows").font(.callout)
+                Text("Menu bar").font(.callout)
                 Spacer()
                 Picker("Menu bar shows", selection: $monitor.s.menuBar) {
                     Text("Icon").tag(Settings.MenuBar.icon)

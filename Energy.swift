@@ -109,8 +109,10 @@ struct AppEnergy: Identifiable, Equatable {
             let bundle = parts[...i].joined(separator: "/")
             return (bundle, String(parts[i].dropLast(4)), bundle)
         }
-        let name = String(parts.last ?? "")
-        return (name, name, nil)
+        let executable = String(parts.last ?? "")
+        // XPC services and the like are named like com.apple.MapKit.SnapshotService: keep the last part.
+        let name = executable.hasPrefix("com.") && !executable.contains(" ") ? String(executable.split(separator: ".").last ?? "") : executable
+        return (executable, name, nil)
     }
 
     // MARK: Quitting
