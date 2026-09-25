@@ -1,7 +1,7 @@
 // Renders the JuiceLeft app icon: `swift assets/make-icon.swift`
 // Writes assets/icon-1024.png, assets/icon-512.png and assets/AppIcon.icns (via iconutil).
-// A battery seen from the front on deep teal, its charge running lime to amber, with three forecast arcs
-// sweeping out of the terminal — the "cast" in JuiceLeft.
+// The menu-bar glyph's battery (same 14 × 8 proportions and corner radius) seen large on deep teal, filled with
+// juice — lime to amber — that sloshes at the level line and throws a drop off the crest.
 import AppKit
 
 let assets = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -29,12 +29,17 @@ func writePNG(_ image: CGImage, _ url: URL) {
     precondition(CGImageDestinationFinalize(dest), "couldn't write \(url.path)")
 }
 
+// The palette. Panel.swift's `Brand` uses the same teal, lime and amber.
+let tealLight: UInt32 = 0x1C7A73, teal: UInt32 = 0x0E4F4E, tealDeep: UInt32 = 0x082C36
+let cream: UInt32 = 0xF6F8EF, lime: UInt32 = 0xB9F26A, sun: UInt32 = 0xF5D84A, amber: UInt32 = 0xFFB23E, orange: UInt32 = 0xFF8F3A
+
 /// The icon on Apple's grid: 824 pt body centred on a 1024 canvas, soft shadow.
 func drawIcon(_ ctx: CGContext, _ s: CGFloat) {
     ctx.scaleBy(x: s, y: s)
     let body = CGRect(x: 100, y: 100, width: 824, height: 824)
     let shape = CGPath(roundedRect: body, cornerWidth: 185, cornerHeight: 185, transform: nil)
 
+    // Drop shadow.
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: srgb(0x000000, 0.32))
     ctx.addPath(shape); ctx.setFillColor(srgb(0x0B2F33)); ctx.fillPath()
@@ -42,43 +47,85 @@ func drawIcon(_ ctx: CGContext, _ s: CGFloat) {
 
     ctx.saveGState()
     ctx.addPath(shape); ctx.clip()
-    // Deep teal, lighter at the top, with a soft glow behind the battery.
-    ctx.drawLinearGradient(gradient([(0, srgb(0x1C7A73)), (0.55, srgb(0x0E4F4E)), (1, srgb(0x082C36))]),
+
+    // Deep teal, lighter at the top, and a lime glow behind the juice.
+    ctx.drawLinearGradient(gradient([(0, srgb(tealLight)), (0.55, srgb(teal)), (1, srgb(tealDeep))]),
                            start: CGPoint(x: 512, y: body.maxY), end: CGPoint(x: 512, y: body.minY), options: [])
-    ctx.drawRadialGradient(gradient([(0, srgb(0x9BE36A, 0.28)), (1, srgb(0x9BE36A, 0))]),
-                           startCenter: CGPoint(x: 470, y: 512), startRadius: 0, endCenter: CGPoint(x: 470, y: 512), endRadius: 430, options: [])
+    ctx.drawRadialGradient(gradient([(0, srgb(lime, 0.34)), (1, srgb(lime, 0))]),
+                           startCenter: CGPoint(x: 440, y: 512), startRadius: 0, endCenter: CGPoint(x: 440, y: 512), endRadius: 440, options: [])
 
-    // The battery: a rounded body 560 × 300 with a terminal on the right, stroked in cream.
-    let batt = CGRect(x: 172, y: 362, width: 560, height: 300)
-    let stroke: CGFloat = 40
-    ctx.setLineCap(.round); ctx.setLineJoin(.round)
+    // The battery: the glyph's 14 × 8 body with its 2.2 corner, at 588 × 336, stroked in cream; the terminal on the right.
+    let batt = CGRect(x: 166, y: 344, width: 588, height: 336)
+    let stroke: CGFloat = 40, corner = batt.height * 2.2 / 8
+    let inner = batt.insetBy(dx: stroke / 2 + 26, dy: stroke / 2 + 26)
+    let innerCorner = corner - stroke / 2 - 26 + 22
+
+    // The well the juice sits in: a shade darker than the ground, with an inner shadow along the top.
     ctx.saveGState()
-    ctx.setShadow(offset: .zero, blur: 30, color: srgb(0xB7F06A, 0.35))
-    ctx.setStrokeColor(srgb(0xF4F7EE)); ctx.setLineWidth(stroke)
-    ctx.addPath(CGPath(roundedRect: batt, cornerWidth: 64, cornerHeight: 64, transform: nil)); ctx.strokePath()
-    ctx.setFillColor(srgb(0xF4F7EE))
-    ctx.addPath(CGPath(roundedRect: CGRect(x: batt.maxX + 28, y: 462, width: 46, height: 100), cornerWidth: 18, cornerHeight: 18, transform: nil)); ctx.fillPath()
+    ctx.addPath(CGPath(roundedRect: inner, cornerWidth: innerCorner, cornerHeight: innerCorner, transform: nil)); ctx.clip()
+    ctx.setFillColor(srgb(tealDeep, 0.35)); ctx.fill(inner)
+    ctx.drawLinearGradient(gradient([(0, srgb(0x000000, 0.28)), (1, srgb(0x000000, 0))]),
+                           start: CGPoint(x: inner.midX, y: inner.maxY), end: CGPoint(x: inner.midX, y: inner.maxY - 60), options: [])
     ctx.restoreGState()
 
-    // The charge: lime to amber, about two thirds full, with a glossy top.
-    let inner = batt.insetBy(dx: stroke / 2 + 30, dy: stroke / 2 + 30)
-    let fill = CGRect(x: inner.minX, y: inner.minY, width: inner.width * 0.68, height: inner.height)
-    ctx.saveGState()
-    ctx.addPath(CGPath(roundedRect: fill, cornerWidth: 34, cornerHeight: 34, transform: nil)); ctx.clip()
-    ctx.drawLinearGradient(gradient([(0, srgb(0xB9F26A)), (1, srgb(0xFFC24A))]),
-                           start: CGPoint(x: fill.minX, y: fill.midY), end: CGPoint(x: fill.maxX, y: fill.midY), options: [])
-    ctx.drawLinearGradient(gradient([(0, srgb(0xFFFFFF, 0.35)), (0.5, srgb(0xFFFFFF, 0)), (1, srgb(0x000000, 0.10))]),
-                           start: CGPoint(x: fill.midX, y: fill.maxY), end: CGPoint(x: fill.midX, y: fill.minY), options: [])
-    ctx.restoreGState()
-
-    // Three forecast arcs sweeping out of the terminal, fading as they go.
-    let origin = CGPoint(x: batt.maxX + 20, y: 512)
-    for (i, radius) in [128.0, 200.0, 272.0].enumerated() {
-        ctx.setStrokeColor(srgb(0xF4F7EE, [0.9, 0.6, 0.35][i]))
-        ctx.setLineWidth(30)
-        ctx.addArc(center: origin, radius: radius, startAngle: -.pi / 3.6, endAngle: .pi / 3.6, clockwise: false)
-        ctx.strokePath()
+    // The juice: lime → sun → amber left to right, up to the level line, which sloshes.
+    let level: CGFloat = 0.64, edge = inner.minX + inner.width * level
+    let wave = CGMutablePath()
+    wave.move(to: CGPoint(x: edge - 6, y: inner.minY - 30))
+    for i in 0...96 {
+        let y = inner.minY - 30 + (inner.height + 60) * CGFloat(i) / 96
+        let t = (y - inner.minY) / inner.height
+        wave.addLine(to: CGPoint(x: edge + 24 * sin(t * 1.25 * 2 * .pi + 0.9) - 10 * t, y: y))
     }
+    let liquid = CGMutablePath()
+    liquid.addPath(wave)
+    liquid.addLine(to: CGPoint(x: inner.minX - 30, y: inner.maxY + 30))
+    liquid.addLine(to: CGPoint(x: inner.minX - 30, y: inner.minY - 30))
+    liquid.closeSubpath()
+    ctx.saveGState()
+    ctx.addPath(CGPath(roundedRect: inner, cornerWidth: innerCorner, cornerHeight: innerCorner, transform: nil)); ctx.clip()
+    ctx.saveGState()
+    ctx.addPath(liquid); ctx.clip()
+    ctx.drawLinearGradient(gradient([(0, srgb(lime)), (0.5, srgb(sun)), (1, srgb(amber))]),
+                           start: CGPoint(x: inner.minX, y: inner.midY), end: CGPoint(x: edge + 30, y: inner.midY), options: [.drawsAfterEndLocation])
+    // Depth: brighter at the top, a warm shade at the bottom.
+    ctx.drawLinearGradient(gradient([(0, srgb(0xFFFFFF, 0.45)), (0.35, srgb(0xFFFFFF, 0)), (1, srgb(orange, 0.32))]),
+                           start: CGPoint(x: inner.midX, y: inner.maxY), end: CGPoint(x: inner.midX, y: inner.minY), options: [])
+    // A gloss strip along the top of the liquid.
+    ctx.saveGState()
+    ctx.addPath(CGPath(roundedRect: CGRect(x: inner.minX + 34, y: inner.maxY - 62, width: edge - inner.minX - 90, height: 30), cornerWidth: 15, cornerHeight: 15, transform: nil)); ctx.clip()
+    ctx.drawLinearGradient(gradient([(0, srgb(0xFFFFFF, 0.55)), (1, srgb(0xFFFFFF, 0.05))]),
+                           start: CGPoint(x: inner.minX, y: 0), end: CGPoint(x: edge, y: 0), options: [])
+    ctx.restoreGState()
+    // Bubbles rising through the amber.
+    ctx.setFillColor(srgb(0xFFFFFF, 0.45))
+    for (x, y, r) in [(edge - 74, inner.minY + 78, 15.0), (edge - 130, inner.minY + 138, 10.0), (edge - 52, inner.minY + 176, 7.5), (edge - 168, inner.minY + 52, 6.5)] as [(CGFloat, CGFloat, CGFloat)] {
+        ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
+    }
+    ctx.restoreGState()
+    // The meniscus: a bright edge along the slosh.
+    ctx.setStrokeColor(srgb(0xFFFFFF, 0.8)); ctx.setLineWidth(10); ctx.setLineCap(.round)
+    ctx.addPath(wave); ctx.strokePath()
+    // A drop thrown off the crest.
+    let crestY = inner.minY + inner.height * 0.82, crestX = edge + 24 * sin(0.82 * 1.25 * 2 * .pi + 0.9) - 10 * 0.82
+    let drop = CGPoint(x: crestX + 58, y: crestY + 20)
+    ctx.setFillColor(srgb(sun))
+    ctx.fillEllipse(in: CGRect(x: drop.x - 13, y: drop.y - 13, width: 26, height: 26))
+    ctx.setFillColor(srgb(0xFFFFFF, 0.55))
+    ctx.fillEllipse(in: CGRect(x: drop.x - 9, y: drop.y + 1, width: 8, height: 8))
+    ctx.setFillColor(srgb(amber))
+    ctx.fillEllipse(in: CGRect(x: drop.x + 26, y: drop.y - 22, width: 12, height: 12))
+    ctx.restoreGState()
+
+    // The outline and the terminal, glowing lime.
+    ctx.saveGState()
+    ctx.setLineCap(.round); ctx.setLineJoin(.round)
+    ctx.setShadow(offset: .zero, blur: 32, color: srgb(lime, 0.4))
+    ctx.setStrokeColor(srgb(cream)); ctx.setLineWidth(stroke)
+    ctx.addPath(CGPath(roundedRect: batt, cornerWidth: corner, cornerHeight: corner, transform: nil)); ctx.strokePath()
+    ctx.setFillColor(srgb(cream))
+    ctx.addPath(CGPath(roundedRect: CGRect(x: batt.maxX + stroke / 2 + 26, y: batt.midY - 59, width: 50, height: 118), cornerWidth: 18, cornerHeight: 18, transform: nil)); ctx.fillPath()
+    ctx.restoreGState()
     ctx.restoreGState()
 
     // Glass edge highlight.
