@@ -45,7 +45,7 @@ import SwiftUI
 /// `JuiceLeft.app/Contents/MacOS/JuiceLeft --selftest`: the pure parts (forecast model and its learning, alert rules,
 /// gesture, settings migration, app grouping) plus the OS hooks (battery read, sound, glyph drawing).
 @MainActor private func selfTest() -> Never {
-    func check(_ ok: Bool, _ what: String) { precondition(ok, "FAIL: \(what)") }
+    func check(_ ok: Bool, _ what: String) { if !ok { fatalError("FAIL: \(what)") } }   // fatalError keeps its message under -O
     func near(_ a: Double, _ b: Double, _ tolerance: Double) -> Bool { abs(a - b) <= abs(b) * tolerance }
 
     // Words.
@@ -164,10 +164,10 @@ import SwiftUI
     // Settings: a stored blob missing new keys keeps its own values, and the levels are kept sane.
     let suite = "io.github.cyborgfingers.juiceleft.selftest"
     let defaults = UserDefaults(suiteName: suite)!
-    defaults.set(#"{"warnAt":25,"alertAt":30,"bogus":1}"#.data(using: .utf8), forKey: Settings.key)
+    defaults.set(#"{"warnAt":25,"alertAt":30,"bogus":1,"menuBar":"time"}"#.data(using: .utf8), forKey: Settings.key)
     let loaded = Settings.load(defaults)
     defaults.removePersistentDomain(forName: suite)
-    check(loaded.warnAt == 25 && loaded.alertAt == 25 && loaded.tone == Tone.chimeName && loaded.menuBar == .time, "settings merge + clamp: \(loaded)")
+    check(loaded.warnAt == 25 && loaded.alertAt == 25 && loaded.tone == Tone.chimeName && loaded.menuBar == .words && loaded.replaceSystemIcon, "settings merge + clamp: \(loaded)")
 
     // Apps: helpers fold into the app; only real user apps get a Quit button.
     let chrome = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/1/Helpers/Google Chrome Helper (GPU).app/Contents/MacOS/Google Chrome Helper (GPU)"
@@ -190,6 +190,30 @@ import SwiftUI
     let facts = Insight.Facts(percent: 34, onAC: false, charging: false, full: false, minutesLeft: 170, ratePerHour: 12, typicalRate: 9, topApps: ["Chrome"])
     check(Insight.template(facts).contains("faster") && Insight.template(facts).contains("Chrome"), "template: \(Insight.template(facts))")
 
+    // The menu bar's words and text parts, per display style.
+    check(Format.words(130, charging: false) == "2 Hours 10 Min Remaining" && Format.words(120, charging: false) == "2 Hours Remaining", "words: hours")
+    check(Format.words(60, charging: false) == "1 Hour Remaining" && Format.words(66, charging: false) == "1 Hour 5 Min Remaining", "words: singular hour")
+    check(Format.words(47, charging: false) == "45 Min Remaining" && Format.words(3, charging: false) == "Less Than 5 Min Remaining", "words: minutes, rounding to 5")
+    check(Format.words(80, charging: true) == "1 Hour 20 Min Until Full" && Format.words(45, charging: true) == "45 Min Until Full", "words: charging")
+    let parts = { (style: Settings.MenuBar, onAC: Bool, full: Bool, charging: Bool, m: Int?) in
+        Monitor.menuParts(style, percent: 84, onAC: onAC, full: full, charging: charging, minutes: m) }
+    check(parts(.words, false, false, false, 130) == ("84%", "2 Hours 10 Min Remaining"), "words: the default")
+    check(parts(.compact, false, false, false, 130) == ("84%", "2:10") && parts(.compact, true, false, true, 45) == ("84%", "Full 45m"), "compact")
+    check(parts(.words, false, false, false, nil) == ("84%", "Estimating…") && parts(.compact, false, false, false, nil) == ("84%", "…"), "estimating")
+    check(parts(.words, true, true, false, nil) == ("84%", nil) && parts(.words, true, false, false, 30) == ("84%", nil), "full / on power, not charging: no time")
+    check(parts(.percent, false, false, false, 130) == ("84%", nil) && parts(.icon, false, false, false, 130) == (nil, nil), "percent, icon")
+    var steady = Steady()
+    check(steady.update(133) == 135 && steady.update(129) == 135 && steady.update(129) == 130, "steady: a new value must come twice")
+    check(steady.update(112) == 110, "steady: a ten-minute jump shows at once")
+    check(steady.update(107) == 110 && steady.update(104) == 105, "steady: settles once the new value has come twice")
+
+    // Energy modes: pmset's output parses, and only the exact request lines are ever written.
+    let custom = "Battery Power:\n lowpowermode         0\n powermode            1\nAC Power:\n powermode            2\n"
+    let power = PowerMode.parse(custom: custom, capabilities: " sleep\n lowpowermode\n highpowermode\n")
+    check(power.battery == .low && power.adapter == .high && power.highPowerSupported, "pmset parse: \(power)")
+    check(!PowerMode.parse(custom: "", capabilities: " lowpowermode\n").highPowerSupported && PowerMode.parse(custom: "", capabilities: "").battery == nil, "no high power, no modes")
+    check(PowerMode.request(.low, onBattery: true) == "b 1" && PowerMode.request(.high, onBattery: false) == "c 2" && PowerMode.request(.automatic, onBattery: true) == "b 0", "helper requests")
+
     // Click decision: quick press or right/⌃-click = panel, held past the deadline = toggle monitoring.
     check(StatusItemController.gesture(.leftMouseDown, control: false) { true } == .panel, "quick press opens the panel")
     check(StatusItemController.gesture(.leftMouseDown, control: false) { false } == .toggle, "hold toggles")
@@ -200,10 +224,14 @@ import SwiftUI
     let reading = LiveBattery.read()
     check(reading != nil, "battery read")
     check(NSSound(data: Tone.chime) != nil, "chime decodes")
-    for frame in [MenuIcon.Frame(level: 100), MenuIcon.Frame(level: 15, plugged: true), MenuIcon.Frame(level: 50, armed: false),
-                  MenuIcon.Frame(level: 8, red: 0.6), MenuIcon.Frame(level: 0, missing: true)] {
-        check(MenuIcon.draw(frame).tiffRepresentation != nil && MenuIcon.draw(frame, side: 44).tiffRepresentation != nil, "glyph draws \(frame)")
+    for frame in [MenuIcon.Frame(level: 100, percent: "100%"), MenuIcon.Frame(level: 15, plugged: true, percent: "15%", trailing: "45 Min Until Full"),
+                  MenuIcon.Frame(level: 50, armed: false, percent: "50%", trailing: "2 Hours 10 Min Remaining"),
+                  MenuIcon.Frame(level: 8, percent: "8%", trailing: "12m", red: 0.6), MenuIcon.Frame(level: 0, missing: true), MenuIcon.Frame(level: 60)] {
+        check(MenuIcon.draw(frame).tiffRepresentation != nil && MenuIcon.glyph(frame, side: 44).tiffRepresentation != nil, "item draws \(frame)")
     }
+    check(MenuIcon.draw(MenuIcon.Frame(level: 60)).size.width == MenuIcon.glyphWidth, "icon-only item is just the glyph")
+    check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%")).size.width > MenuIcon.glyphWidth + 20, "percent makes room for the text")
+    check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%", trailing: "2 Hours 10 Min Remaining")).size.width > MenuIcon.glyphWidth + 120, "the words make room after the glyph")
 
     let r = reading!
     print("PASS: alert rules, forecast + learning (priors \(String(format: "%.1f", morning.rate))/\(String(format: "%.1f", evening.rate)) → \(String(format: "%.1f", evening2.rate)) %/h, miss \(String(format: "%.0f", (learner.relativeError ?? 0) * 100))%), settings, apps, gesture, glyphs; battery \(r.percent)% \(r.onAC ? "on power" : "on battery"), health \(r.health.map { String(format: "%.0f%%", $0) } ?? "?"), \(r.cycles ?? 0) cycles; Apple Intelligence \(AppleIntelligence.available ? "available" : "not available")")

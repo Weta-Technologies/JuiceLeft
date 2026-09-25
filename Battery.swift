@@ -13,8 +13,10 @@ struct Reading: Equatable {
     var full: Bool
     var lowPowerMode = false
     var osMinutesLeft: Int?         // macOS's time to empty (on battery) or to full (charging); nil = it doesn't know
+    var maxCapacity: Double?        // Apple's own health figure: a percent on Apple Silicon (what System Settings shows), mAh on Intel
     var rawCurrent: Double?         // mAh in the cells now
-    var rawMax: Double?             // mAh a full charge holds today
+    var rawMax: Double?             // mAh a full charge holds today (varies with temperature and load)
+    var cellCapacity: Double?       // mAh the cells can hold, the gauge's Qmax
     var designCapacity: Double?     // mAh a full charge held when new
     var cycles: Int?
     var designCycles: Int?
@@ -41,10 +43,16 @@ struct Reading: Equatable {
         guard let amps, let rawMax, rawMax > 0 else { return nil }
         return amps * 1000 / rawMax * 100
     }
-    /// Today's full charge as a share of the design capacity.
+    /// Apple's health figure, the one System Settings › Battery shows: MaxCapacity is already a percent on Apple
+    /// Silicon; on Intel it is mAh, so it is set against the design capacity. Never the raw full-charge ratio, which
+    /// swings with temperature and load and reads several percent low on a healthy battery.
     var health: Double? {
-        guard let rawMax, let designCapacity, designCapacity > 0 else { return nil }
-        return rawMax / designCapacity * 100
+        if let maxCapacity {
+            if maxCapacity <= 100 { return maxCapacity }
+            if let designCapacity, designCapacity > 0 { return maxCapacity / designCapacity * 100 }
+        }
+        guard let cellCapacity, let designCapacity, designCapacity > 0 else { return nil }
+        return min(cellCapacity / designCapacity * 100, 100)
     }
     var condition: String { failed || (health ?? 100) < 80 ? "Service recommended" : "Normal" }
 }
@@ -110,9 +118,13 @@ final class LiveBattery: BatterySource {
               let p = props?.takeRetainedValue() as? [String: Any] else { return r }
         // Signed values (current, when discharging) arrive as the unsigned 64-bit bit pattern; int64Value puts the sign back.
         let num = { (key: String) -> Double? in (p[key] as? NSNumber).map { Double($0.int64Value) } }
+        r.maxCapacity = num("MaxCapacity")
         r.rawCurrent = num("AppleRawCurrentCapacity")
         r.rawMax = num("AppleRawMaxCapacity")
         r.designCapacity = num("DesignCapacity")
+        if let data = p["BatteryData"] as? [String: Any], let qmax = data["Qmax"] as? [NSNumber], !qmax.isEmpty {
+            r.cellCapacity = qmax.map(\.doubleValue).reduce(0, +) / Double(qmax.count)
+        }
         r.cycles = p["CycleCount"] as? Int
         r.designCycles = p["DesignCycleCount9C"] as? Int
         r.volts = num("Voltage").map { $0 / 1000 }
@@ -166,6 +178,20 @@ enum Format {
         let m = max(minutes, 0)
         return m >= 60 ? String(format: "%d:%02d", m / 60, m % 60) : "\(m)m"
     }
+
+    /// The menu bar's spelled-out form, to the nearest five minutes: "2 Hours 10 Min Remaining", "1 Hour Remaining",
+    /// "45 Min Remaining", "Less Than 5 Min Remaining"; charging, "… Until Full".
+    static func words(_ minutes: Int, charging: Bool) -> String {
+        let suffix = charging ? "Until Full" : "Remaining"
+        guard minutes >= 5 else { return "Less Than 5 Min \(suffix)" }
+        let m = max(rounded5(minutes), 5)
+        var parts: [String] = []
+        if m >= 60 { parts.append(m / 60 == 1 ? "1 Hour" : "\(m / 60) Hours") }
+        if m % 60 > 0 { parts.append("\(m % 60) Min") }
+        return (parts + [suffix]).joined(separator: " ")
+    }
+
+    static func rounded5(_ minutes: Int) -> Int { Int((Double(max(minutes, 0)) / 5).rounded()) * 5 }
 
     static func watts(_ w: Double) -> String { String(format: abs(w) < 10 ? "%.1f W" : "%.0f W", abs(w)) }
 }

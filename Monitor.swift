@@ -3,7 +3,7 @@ import AppKit
 /// Everything the panel edits, persisted as one blob. Loading merges the stored JSON over the defaults, so a field
 /// added in a later version keeps everyone's other settings.
 struct Settings: Codable, Equatable {
-    enum MenuBar: String, Codable, CaseIterable { case icon, percent, time }
+    enum MenuBar: String, Codable, CaseIterable { case icon, percent, compact, words }   // 1.0's "time" no longer decodes: those installs get the new default
     var armed = true
     var warnAt = 20              // %: the menu-bar item flashes red
     var alertAt = 10             // %: the tone
@@ -14,7 +14,8 @@ struct Settings: Codable, Equatable {
     var unplugReminder = false   // charging care: a nudge at 80 %
     var fullNotice = false
     var plugNotices = false      // charger connected / disconnected
-    var menuBar = MenuBar.time
+    var menuBar = MenuBar.words     // "84% [battery] 2 Hours 10 Min Remaining"
+    var replaceSystemIcon = true // hide Apple's battery item while JuiceLeft runs
     var insight = true           // the plain-English line (Apple Intelligence phrases it when available)
 
     static let key = "settings"
@@ -22,8 +23,10 @@ struct Settings: Codable, Equatable {
     static func load(_ defaults: UserDefaults) -> Settings {
         guard let stored = defaults.data(forKey: key),
               let base = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(Settings())) as? [String: Any],
-              let saved = try? JSONSerialization.jsonObject(with: stored) as? [String: Any],
-              let merged = try? JSONSerialization.data(withJSONObject: base.merging(saved) { $1 }),
+              var saved = try? JSONSerialization.jsonObject(with: stored) as? [String: Any] else { return Settings() }
+        // A choice this version no longer offers falls back to the default, without costing the other settings.
+        if let style = saved["menuBar"] as? String, !MenuBar.allCases.contains(where: { $0.rawValue == style }) { saved["menuBar"] = nil }
+        guard let merged = try? JSONSerialization.data(withJSONObject: base.merging(saved) { $1 }),
               let settings = try? JSONDecoder().decode(Settings.self, from: merged)
         else { return Settings() }
         return settings.normalized
@@ -78,6 +81,15 @@ struct History: Codable, Equatable {
             guard s != oldValue else { return }
             defaults.set(try? JSONEncoder().encode(s), forKey: Settings.key)
             if !s.armed { tone.stop() }
+            if s.replaceSystemIcon != oldValue.replaceSystemIcon {
+                if s.replaceSystemIcon {
+                    let moved = SystemBattery.takePosition(remembering: defaults)
+                    SystemBattery.hide(remembering: defaults)
+                    if moved { onReposition?() }
+                } else {
+                    SystemBattery.restore(from: defaults, forget: true)
+                }
+            }
             evaluate()
         }
     }
@@ -88,11 +100,15 @@ struct History: Codable, Equatable {
     @Published private(set) var snoozedUntil: Date?
     @Published private(set) var notificationsAllowed: Bool?   // nil = not decided / not available
     @Published var note: String?                                // an error worth a line in the panel
+    @Published private(set) var power = PowerMode.State()      // energy modes per source
+    @Published private(set) var powerBusy = false               // a change is on its way through the helper
+    @Published private(set) var welcome = false                 // first run: say what happened to Apple's icon
     let icon = MenuIcon()
     let tone = Tone()
     let energy = EnergyMeter()
     let insight = Insight()
     var log: ((String) -> Void)?                                // --simulate prints what happens
+    var onReposition: (() -> Void)?                             // the status item re-reads its saved place
 
     static let snooze: TimeInterval = 30 * 60
     static let unplugAt = 80
@@ -104,6 +120,9 @@ struct History: Codable, Equatable {
     private var alerts = Alerts.State()
     private var remindedUnplug = false, noticedFull = false
     private var savedAt = Date.distantPast
+    private var powerTimer: Timer?
+    private var steady = Steady()                               // the menu bar's spelled-out minutes
+    private(set) var squeezed = false                           // macOS had no room for the item: fall back to the compact form
 
     init(source: BatterySource, defaults: UserDefaults = .standard, historyURL: URL = History.url) {
         self.source = source
@@ -116,9 +135,19 @@ struct History: Codable, Equatable {
             defaults.set(true, forKey: "loginItemOffered")
             note = LoginItem.set(true)
         }
+        // A straight swap: Apple's battery item goes while JuiceLeft runs and comes back when it quits, and JuiceLeft's
+        // item takes its place in the bar (this runs before the status item is made, which is when the place is read).
+        if s.replaceSystemIcon {
+            SystemBattery.takePosition(remembering: defaults)   // before the hide: Control Center drops the position of a hidden item
+            SystemBattery.hide(remembering: defaults)
+            if !defaults.bool(forKey: "welcomed") { defaults.set(true, forKey: "welcomed"); welcome = true }
+        }
         source.onReading = { [weak self] reading in MainActor.assumeIsolated { self?.ingest(reading) } }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.persist(force: true) }
+            MainActor.assumeIsolated {
+                self?.persist(force: true)
+                if let self, self.s.replaceSystemIcon { SystemBattery.restore(from: self.defaults) }
+            }
         }
     }
 
@@ -150,6 +179,87 @@ struct History: Codable, Equatable {
 
     func testTone() { tone.play(s.tone, volume: s.volume) }
 
+    func dismissWelcome() { welcome = false }
+
+    // MARK: Energy modes
+
+    /// The status item found (or lost) room in the menu bar.
+    func setSqueezed(_ squeezed: Bool) {
+        guard squeezed != self.squeezed else { return }
+        self.squeezed = squeezed
+        evaluate()
+    }
+
+    /// The mode for the power source in use right now.
+    var activeMode: PowerMode.Mode? { reading?.onAC == true ? power.adapter : power.battery }
+
+    private(set) var panelIsOpen = false
+
+    /// The hover card's two lines: the time in words, then the clock time, the percent and the state; red when low.
+    var hoverLines: (title: String, detail: String, warning: Bool) {
+        guard let r = reading else { return ("No battery", "JuiceLeft needs a Mac with a battery", false) }
+        let title: String
+        if r.onAC {
+            title = r.full ? "Fully Charged" : r.charging ? steady.shown.map { Format.words($0, charging: true) } ?? "Estimating…" : "On Power, Not Charging"
+        } else {
+            title = steady.shown.map { Format.words($0, charging: false) } ?? "Estimating…"
+        }
+        var parts: [String] = []
+        if let f = forecast { parts.append(f.kind == .flat ? "Flat around \(Format.clock(f.at))" : "Full around \(Format.clock(f.at))") }
+        parts.append("\(r.percent)%")
+        if r.onAC, let w = r.adapterWatts { parts.append("\(w) W charger") }
+        switch phase {
+        case .alert: parts.append("At or below \(s.alertAt)%: sounding")
+        case .warning: parts.append("At or below \(s.warnAt)%: flashing")
+        case .clear: parts.append(s.armed ? "Alerts on" : "Alerts off")
+        }
+        return (title, parts.joined(separator: " · "), phase != .clear)
+    }
+
+    /// While the panel is open the modes are re-read once a minute, so a change made in System Settings shows here.
+    func panelOpened() {
+        panelIsOpen = true
+        refreshPower()
+        energy.start()
+        let timer = Timer(timeInterval: 60, repeats: true) { _ in MainActor.assumeIsolated { self.refreshPower() } }
+        RunLoop.main.add(timer, forMode: .common)
+        powerTimer = timer
+    }
+
+    func panelClosed() {
+        panelIsOpen = false
+        energy.stop()
+        powerTimer?.invalidate()
+        powerTimer = nil
+    }
+
+    func refreshPower() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let state = PowerMode.read()
+            DispatchQueue.main.async { MainActor.assumeIsolated { if state != self.power { self.power = state } } }
+        }
+    }
+
+    /// Sets the mode for the source in use, installing the root helper (one admin prompt) the first time.
+    func setPowerMode(_ mode: PowerMode.Mode) {
+        guard mode != activeMode, let r = reading else { return }
+        note = nil
+        if !PowerMode.helperReady, let why = PowerMode.installHelper() { note = "Energy modes need the helper: \(why)"; return }
+        if let why = PowerMode.set(mode, onBattery: !r.onAC) { note = why; return }
+        powerBusy = true
+        log?("power mode → \(PowerMode.request(mode, onBattery: !r.onAC))")
+        for delay in [0.7, 2.0, 4.5] {   // the helper runs on the file write; confirm from pmset itself
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                MainActor.assumeIsolated {
+                    self.refreshPower()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        MainActor.assumeIsolated { if self.activeMode == mode || delay == 4.5 { self.powerBusy = false } }
+                    }
+                }
+            }
+        }
+    }
+
     func setLoginItem(_ on: Bool) {
         note = LoginItem.set(on)
         objectWillChange.send()
@@ -170,6 +280,7 @@ struct History: Codable, Equatable {
         if let previous, r.onAC != previous.onAC || slept {
             if !previous.onAC, !slept { history.learner.endDischarge(now: r.at, level: previous.level) } else { history.learner.abandon() }
             samples = []
+            steady.reset()
             remindedUnplug = false
             noticedFull = false
             if !slept, r.onAC != previous.onAC { plugChanged(r) }
@@ -213,7 +324,10 @@ struct History: Codable, Equatable {
             noticedFull = true
             notify(id: "full", title: "Fully charged", body: "You can unplug.")
         }
-        icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed), phase: phase)
+        let minutes = forecast.map { steady.update($0.minutes) }
+        let parts = Self.menuParts(squeezed && s.menuBar == .words ? .compact : s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full,
+                                   charging: r.charging, minutes: minutes)
+        icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
         insight.update(facts, ai: s.insight)
     }
 
@@ -224,6 +338,7 @@ struct History: Codable, Equatable {
 
     private func plugChanged(_ r: Reading) {
         log?(r.onAC ? "charger connected" : "unplugged")
+        if powerTimer != nil { refreshPower() }
         guard s.plugNotices else { return }
         if r.onAC {
             notify(id: "plug", title: "Charger connected", body: [r.adapterName, r.adapterWatts.map { "\($0) W" }].compactMap { $0 }.joined(separator: " · "))
@@ -272,15 +387,20 @@ struct History: Codable, Equatable {
         return parts.joined(separator: " · ")
     }
 
-    /// Text beside the menu-bar glyph, per the display setting.
-    var menuText: String? {
-        guard let r = reading else { return nil }
-        switch s.menuBar {
-        case .icon: return nil
-        case .percent: return "\(r.percent)%"
-        case .time:
-            if r.onAC { return r.full ? "Full" : forecast.map { "Full \(Format.compact($0.minutes))" } ?? "\(r.percent)%" }
-            return forecast.map { Format.compact($0.minutes) } ?? "…"
+    /// The text either side of the glyph, per the display setting: Apple's "84%" in front, and after it the time —
+    /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full"), or compact ("2:10", "Full 45m"); "Estimating…"
+    /// (or "…") until there is a forecast; nothing at all when the battery is full. Pure, so --selftest can check it.
+    nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?)
+        -> (percent: String?, trailing: String?) {
+        let pct = "\(percent)%"
+        switch style {
+        case .icon: return (nil, nil)
+        case .percent: return (pct, nil)
+        case .compact, .words:
+            if onAC && (full || !charging) { return (pct, nil) }
+            guard let minutes else { return (pct, style == .words ? "Estimating…" : "…") }
+            let time = style == .words ? Format.words(minutes, charging: onAC) : onAC ? "Full \(Format.compact(minutes))" : Format.compact(minutes)
+            return (pct, time)
         }
     }
 

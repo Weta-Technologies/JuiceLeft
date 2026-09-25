@@ -41,8 +41,10 @@ final class Simulator: BatterySource {
         let drain = -(30.0 / 100) * Self.rawMax / 1000   // amps for a 30 %/h drain
         var r = Reading(at: clock, percent: Int(percent), onAC: onAC, charging: onAC && percent < 100, full: onAC && percent >= 100)
         r.osMinutesLeft = onAC ? Int((100 - percent) / 60 * 60) : Int(percent * 2 * 1.3)   // macOS's "guess", a bit pessimistic
+        r.maxCapacity = 100
         r.rawCurrent = percent / 100 * Self.rawMax
         r.rawMax = Self.rawMax
+        r.cellCapacity = 6460
         r.designCapacity = 6249
         r.cycles = 132
         r.designCycles = 1000

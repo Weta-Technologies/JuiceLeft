@@ -22,8 +22,8 @@ import SwiftUI
     private let host: NSHostingController<AnyView>
     private var sinks: [AnyCancellable] = []
     private var monitors: [Any] = []
-    private var shown: (text: String?, red: CGFloat)?
-    private let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
+    private var openedAt = Date.distantPast
+    private var hover: HoverCard?
 
     init(monitor: Monitor) {
         self.monitor = monitor
@@ -33,15 +33,30 @@ import SwiftUI
         popover.behavior = .applicationDefined      // closed by the monitors below; .transient races with the item click
 
         item.autosaveName = "Item-0"   // what MenuBarExtra uses, so menu-bar organisers keep recognising the item
+        monitor.onReposition = { [weak self] in   // the swap wrote a new saved place: re-read it
+            guard let self else { return }
+            self.item.autosaveName = nil
+            self.item.autosaveName = "Item-0"
+        }
         guard let button = item.button else { return }
         button.target = self
         button.action = #selector(clicked)
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
-        button.imagePosition = .imageLeading
+        button.imagePosition = .imageOnly   // the text is part of the image, laid out exactly like Apple's item
         button.setAccessibilityHelp("Click for battery details. Press and hold to turn monitoring on or off.")
-        monitor.icon.$image.sink { image in MainActor.assumeIsolated { button.image = image } }.store(in: &sinks)
-        // The text follows the reading, the forecast, the display setting and the red pulse.
-        monitor.objectWillChange.merge(with: monitor.icon.objectWillChange).receive(on: DispatchQueue.main)
+        hover = HoverCard(monitor: monitor, button: button)   // the card under the item stands in for a tooltip
+        monitor.icon.$image.sink { [weak self] image in
+            MainActor.assumeIsolated {
+                button.image = image
+                self?.checkRoom()
+            }
+        }.store(in: &sinks)
+        // ponytail: best effort — when the menu bar runs out of room macOS drops the item off screen; the compact form
+        // is tried then, and the full one again every few minutes. Untested for want of a crowded enough bar.
+        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] note in
+            MainActor.assumeIsolated { if (note.object as? NSWindow) === self?.item.button?.window { self?.checkRoom() } }
+        }
+        monitor.objectWillChange.receive(on: DispatchQueue.main)
             .sink { [weak self] in MainActor.assumeIsolated { self?.refreshText() } }.store(in: &sinks)
 
         let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self] event in
@@ -55,24 +70,35 @@ import SwiftUI
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }
+        // Activation lands a moment after it is asked for; the panel takes key status then, so Esc and the keyboard work.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.popover.isShown else { return }
+                self.host.view.window?.makeKeyAndOrderFront(nil)
+            }
+        }
         refreshText()
     }
 
+    private var roomRetry: Timer?
+
+    /// Off screen or occluded while the screens are on = squeezed out; the compact form goes up in its place.
+    private func checkRoom() {
+        guard let window = item.button?.window, let screen = NSScreen.main else { return }
+        let onScreen = window.occlusionState.contains(.visible) && screen.frame.intersects(window.frame) && window.frame.width > 1
+        if !onScreen, !monitor.squeezed {
+            monitor.setSqueezed(true)
+            let retry = Timer(timeInterval: 5 * 60, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.monitor.setSqueezed(false) } }
+            RunLoop.main.add(retry, forMode: .common)
+            roomRetry = retry
+        }
+    }
+
+    /// VoiceOver always gets the whole story, whatever the menu bar shows.
     private func refreshText() {
         guard let button = item.button else { return }
-        let text = monitor.menuText, red = monitor.icon.frame.red
-        if shown?.text != text || shown?.red != red {
-            shown = (text, red)
-            var attributes: [NSAttributedString.Key: Any] = [.font: font]
-            if red > 0 { attributes[.foregroundColor] = NSColor.systemRed.withAlphaComponent(red) }
-            button.attributedTitle = NSAttributedString(string: text.map { " " + $0 } ?? "", attributes: attributes)
-            button.imagePosition = text == nil ? .imageOnly : .imageLeading
-        }
         let spoken = monitor.spoken
-        if button.accessibilityLabel() != spoken {
-            button.setAccessibilityLabel(spoken)
-            button.toolTip = spoken.replacingOccurrences(of: "JuiceLeft: ", with: "") + " Click for details; press and hold to turn monitoring \(monitor.s.armed ? "off" : "on")."
-        }
+        if button.accessibilityLabel() != spoken { button.setAccessibilityLabel(spoken) }
     }
 
     /// Esc closes the popover (and is swallowed); a click in any window but the popover's or the item's closes it.
@@ -88,8 +114,13 @@ import SwiftUI
     }
 
     @objc private func clicked() {
-        guard let event = NSApp.currentEvent else { return }
-        if popover.isShown { return close() }
+        hover?.hide()
+        if popover.isShown {
+            guard Date().timeIntervalSince(openedAt) > 0.5 else { return }   // the same press bouncing back, not a second click
+            return close()
+        }
+        // No mouse event behind the action (VoiceOver's press, for one): that is a request for the panel.
+        guard let event = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown].contains(event.type) else { return open() }
         let gesture = Self.gesture(event.type, control: event.modifierFlags.contains(.control)) {
             // Peek (no dequeue) so the button's own tracking still sees the mouse-up.
             NSApp.nextEvent(matching: .leftMouseUp, until: Date(timeIntervalSinceNow: Self.holdDelay), inMode: .eventTracking, dequeue: false) != nil
@@ -112,16 +143,19 @@ import SwiftUI
         host.rootView = Self.panel(monitor, visible: true)
         host.view.layoutSubtreeIfNeeded()
         popover.contentSize = host.view.fittingSize
-        if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+        // Activate outright: on macOS 14+ the plain activate() is cooperative and can be refused while another app is
+        // frontmost, which left the popover without key status, so Esc and the keyboard went to that app.
+        NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        host.view.window?.makeKey()
-        monitor.energy.start()   // the top-apps list only samples while the panel is open
+        host.view.window?.makeKeyAndOrderFront(nil)
+        openedAt = Date()
+        monitor.panelOpened()   // top apps and energy modes only refresh while the panel is open
     }
 
     private func close() {
         guard popover.isShown else { return }
         popover.close()
-        monitor.energy.stop()
+        monitor.panelClosed()
         host.rootView = Self.panel(monitor, visible: false)
     }
 }

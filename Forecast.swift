@@ -17,6 +17,23 @@ struct Forecast: Equatable {
     var learned = false         // a learned prior took part
 }
 
+/// Keeps the menu bar's spelled-out time from flip-flopping: the shown value (rounded to five minutes) only moves when
+/// the new one differs by ten minutes or more, or has come up twice in a row.
+struct Steady: Equatable {
+    private(set) var shown: Int?
+    private var pending: Int?
+
+    mutating func update(_ minutes: Int) -> Int {
+        let new = Format.rounded5(minutes)
+        guard let current = shown else { shown = new; return new }
+        if abs(new - current) >= 10 || new == pending { shown = new; pending = nil; return new }
+        pending = new == current ? nil : new
+        return current
+    }
+
+    mutating func reset() { shown = nil; pending = nil }
+}
+
 /// The three opinions of the drain rate the forecast blends.
 enum RateSource: Int, Codable, CaseIterable { case live, trend, prior }
 

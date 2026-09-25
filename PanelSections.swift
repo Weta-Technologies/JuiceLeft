@@ -109,8 +109,8 @@ struct EnergyCard: View {
     @ObservedObject var meter: EnergyMeter
 
     private var subtitle: String {
-        if meter.measuring { return "Measuring your apps…" }
-        return meter.apps.isEmpty ? "Nothing busy right now" : "Your apps by processor time, live"
+        if meter.apps.isEmpty { return meter.measuring ? "Measuring your apps…" : "Nothing busy right now" }
+        return "Your apps by processor time, live"
     }
 
     var body: some View {
@@ -201,10 +201,10 @@ struct BatteryCard: View {
     private var summary: String {
         guard let r = monitor.reading else { return "No battery" }
         var parts: [String] = []
-        if let h = r.health { parts.append("\(Int(h.rounded()))% health") }
-        if let c = r.cycles { parts.append("\(c) cycles") }
+        if let h = r.health { parts.append("Health \(Int(h.rounded()))%") }
+        parts.append(r.condition)
         if let t = r.celsius { parts.append(String(format: "%.0f °C", t)) }
-        return parts.isEmpty ? r.condition : parts.joined(separator: " · ")
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -213,15 +213,24 @@ struct BatteryCard: View {
             if let r = monitor.reading {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
-                    if let h = r.health, let m = r.rawMax, let d = r.designCapacity {
-                        StatRow(label: "Maximum capacity", value: "\(Int(h.rounded()))% · \(Int(m).formatted()) of \(Int(d).formatted()) mAh",
-                                help: "What a full charge holds today against the design capacity, straight from the gas gauge. System Settings shows Apple's own calibrated figure, which can differ by a few percent.")
+                    if let h = r.health {
+                        StatRow(label: "Maximum capacity", value: "\(Int(h.rounded()))%",
+                                help: "Apple's own health figure, the same one System Settings › Battery shows.")
                     }
+                    StatRow(label: "Condition", value: r.condition, help: "Normal unless the gas gauge reports a failure or Apple's capacity figure has fallen below 80%.")
                     if let c = r.cycles {
                         StatRow(label: "Cycle count", value: r.designCycles.map { "\(c) of \($0.formatted())" } ?? "\(c)",
                                 help: "Full charge-discharge cycles so far, against the number the battery is designed for.")
                     }
-                    StatRow(label: "Condition", value: r.condition, help: "Normal unless the gas gauge reports a failure or the capacity has fallen below 80%.")
+                    if let q = r.cellCapacity, let d = r.designCapacity, d > 0 {
+                        StatRow(label: "Cell capacity", value: "\(Int(q.rounded()).formatted()) mAh · \(Int((q / d * 100).rounded()))% of design",
+                                help: "What the cells can hold, as the gas gauge has measured it (Qmax). A young battery often reads a little over its design figure.")
+                    }
+                    if let m = r.rawMax {
+                        StatRow(label: "Usable full charge now", value: "\(Int(m.rounded()).formatted()) mAh",
+                                help: "What a full charge can deliver right now. It moves with temperature and load, so it reads a few percent below the cell capacity most of the time — that is not wear.")
+                    }
+                    if let d = r.designCapacity { StatRow(label: "Design capacity", value: "\(Int(d.rounded()).formatted()) mAh", help: "What a full charge held when the battery was new.") }
                     if let t = r.celsius { StatRow(label: "Temperature", value: String(format: "%.1f °C", t), help: "The battery pack. Charging is slower when it is hot.") }
                     if let v = r.volts { StatRow(label: "Voltage", value: String(format: "%.2f V", v)) }
                     if r.onAC {
@@ -335,11 +344,15 @@ struct GeneralRows: View {
                 Picker("Menu bar shows", selection: $monitor.s.menuBar) {
                     Text("Icon").tag(Settings.MenuBar.icon)
                     Text("Percent").tag(Settings.MenuBar.percent)
-                    Text("Time left").tag(Settings.MenuBar.time)
+                    Text("Compact").tag(Settings.MenuBar.compact)
+                    Text("Words").tag(Settings.MenuBar.words)
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("Beside the battery glyph: nothing, the percent, or the time to flat (2:10) — “Full 45m” while charging.")
+                .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The tooltip and VoiceOver always have the whole story.")
             }
+            SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
+                      help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
+                      isOn: $monitor.s.replaceSystemIcon)
             if AppleIntelligence.available {
                 SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line on this Mac; the numbers are always JuiceLeft's",
                           help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)

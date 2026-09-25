@@ -39,6 +39,13 @@ struct Panel: View {
         VStack(alignment: .leading, spacing: 12) {
             StatusHeader(monitor: monitor)
             InsightLine(monitor: monitor, insight: monitor.insight)
+            EnergyModeRow(monitor: monitor)
+            if monitor.welcome {
+                Notice(text: "JuiceLeft has taken the place of the macOS battery icon. Turn “Replace the macOS battery icon” off below to bring it back; quitting brings it back too.", kind: .info) {
+                    withAnimation(reduceMotion ? nil : panelEase) { monitor.dismissWelcome() }
+                }
+                .transition(.opacity)
+            }
             if let note = monitor.note {
                 Notice(text: note, kind: .warning) { monitor.note = nil }
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
@@ -76,6 +83,37 @@ struct Panel: View {
         }
         .padding(14)
         .animation(reduceMotion ? nil : panelEase, value: monitor.note)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.welcome)
+    }
+}
+
+/// Low Power · Automatic · High Power for the power source in use, the way Apple's battery menu offers them.
+struct EnergyModeRow: View {
+    @ObservedObject var monitor: Monitor
+
+    private var modes: [PowerMode.Mode] { monitor.power.highPowerSupported ? [.low, .automatic, .high] : [.low, .automatic] }
+
+    var body: some View {
+        if monitor.activeMode != nil {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("Energy mode").font(.callout)
+                    Text(monitor.reading?.onAC == true ? "on the charger" : "on battery").font(.caption).foregroundStyle(.secondary)
+                    if monitor.powerBusy { ProgressView().controlSize(.small) }
+                    Spacer()
+                    Button("Battery Settings…") { SystemBattery.openBatterySettings() }
+                        .buttonStyle(.link).font(.caption)
+                        .help("Open System Settings › Battery.")
+                }
+                Picker("Energy mode", selection: Binding(get: { monitor.activeMode ?? .automatic }, set: { monitor.setPowerMode($0) })) {
+                    ForEach(modes) { Text($0.name).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .disabled(monitor.powerBusy)
+                .help("The energy mode for the power source in use now — the same setting as System Settings › Battery. Low Power stretches the battery; High Power lets the Mac run flat out on the charger. Changing it needs a small helper, installed once with your password.")
+            }
+            .padding(.horizontal, 2)
+        }
     }
 }
 
@@ -145,7 +183,7 @@ struct LiveGlyph: View {
     var body: some View {
         var frame = icon.frame
         frame.red = 0
-        return Image(nsImage: MenuIcon.draw(frame, side: 44)).renderingMode(.template)
+        return Image(nsImage: MenuIcon.glyph(frame, side: 44)).renderingMode(.template)
             .foregroundStyle(tint)
             .opacity(icon.frame.red > 0 ? icon.frame.red : 1)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: tint)
@@ -188,18 +226,25 @@ struct InsightLine: View {
     }
 }
 
-/// An inline, dismissible message: an error (warning) or the first-run tip.
+/// An inline, dismissible message: an error (warning), something worth knowing (info) or the first-run tip.
 struct Notice: View {
-    enum Kind { case warning, tip }
+    enum Kind { case warning, info, tip }
     let text: String
     let kind: Kind
     let dismiss: () -> Void
 
     private var color: Color { kind == .warning ? .orange : .accentColor }
+    private var symbol: String {
+        switch kind {
+        case .warning: return "exclamationmark.triangle.fill"
+        case .info: return "checkmark.circle.fill"
+        case .tip: return "lightbulb.fill"
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: kind == .warning ? "exclamationmark.triangle.fill" : "lightbulb.fill").foregroundStyle(color)
+            Image(systemName: symbol).foregroundStyle(color)
             Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(action: dismiss) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
@@ -323,6 +368,7 @@ struct SwitchRow: View {
             }
             Spacer(minLength: 0)
             Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small).help(help)
+                .accessibilityLabel(title)
         }
     }
 }
