@@ -419,6 +419,6 @@ struct History: Codable, Equatable {
         Insight.Facts(percent: reading?.percent ?? 0, onAC: reading?.onAC ?? false, charging: reading?.charging ?? false,
                       full: reading?.full ?? false, minutesLeft: forecast?.minutes, ratePerHour: forecast?.ratePerHour,
                       typicalRate: reading.map { history.learner.prior(at: $0.at) } ?? nil,
-                      topApps: energy.apps.prefix(2).map(\.name))
+                      topApps: energy.ranking.apps.prefix(2).map(\.name))
     }
 }

@@ -107,14 +107,18 @@ struct LevelRow: View {
 /// The five apps using the most processor time right now, each with a Quit button.
 struct EnergyCard: View {
     @ObservedObject var meter: EnergyMeter
+    @State private var showBackground = false
+
+    private var ranking: Ranking { meter.ranking }
+    private var measured: Bool { !ranking.apps.isEmpty || ranking.backgroundShare > 0 }
 
     private var subtitle: String {
-        if meter.apps.isEmpty { return meter.measuring ? "Measuring your apps…" : "Nothing busy right now" }
-        return "Your apps by processor time, live"
+        if !measured { return meter.measuring ? "Measuring your apps…" : "Nothing is using much power" }
+        return ranking.apps.isEmpty ? "None of your apps is using much power" : "Your apps, by share of processor time"
     }
 
     var body: some View {
-        Card(title: "Using the most power", subtitle: subtitle, symbol: "bolt.fill", tint: .orange, lit: !meter.apps.isEmpty,
+        Card(title: "Using the most power", subtitle: subtitle, symbol: "bolt.fill", tint: .orange, lit: !ranking.apps.isEmpty,
              trailing: {
                  Button {
                      NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"),
@@ -124,17 +128,64 @@ struct EnergyCard: View {
                      .help("Open Activity Monitor for the full picture, including system processes.")
                      .accessibilityLabel("Open Activity Monitor")
              }) {
-            if !meter.apps.isEmpty {
+            if measured {
                 Divider()
-                VStack(spacing: 6) { ForEach(meter.apps) { AppRow(app: $0, meter: meter) } }
+                VStack(spacing: 6) {
+                    ForEach(ranking.apps) { AppRow(app: $0, top: ranking.apps.first?.share ?? 1, meter: meter) }
+                    if ranking.apps.count < EnergyMeter.count, !ranking.apps.isEmpty {
+                        Text("Nothing else is using much power.").font(.caption).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+                    }
+                    if ranking.backgroundShare > 0 { backgroundRow }
+                }
             }
         }
-        .help("Processor time is the best per-app proxy for battery use that a Mac exposes without root. System processes such as WindowServer aren't listed; Activity Monitor has them.")
+        .help("Measured from processor time, the best per-app proxy for battery use a Mac exposes without root. Shares are of everything measured, so they add up to 100.")
+    }
+
+    /// Everything that isn't one of the user's apps, rolled into one quiet line, with the top few behind a disclosure.
+    private var backgroundRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(panelEase) { showBackground.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape").foregroundStyle(.secondary).frame(width: 18).accessibilityHidden(true)
+                    Text("System & background").font(.callout).foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    Text("\(Int((ranking.backgroundShare * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showBackground ? 90 : 0)).frame(width: 14)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("macOS's own processes and background helpers — nothing here can be quit from JuiceLeft.")
+            .accessibilityLabel("System and background, \(Int((ranking.backgroundShare * 100).rounded())) percent")
+            .accessibilityValue(showBackground ? "expanded" : "collapsed")
+            if showBackground {
+                ForEach(ranking.background) { item in
+                    HStack(spacing: 8) {
+                        Text(item.name).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 6)
+                        Text("\(Int((item.share * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                            .frame(width: 34, alignment: .trailing)
+                        Color.clear.frame(width: 14, height: 1)
+                    }
+                    .padding(.leading, 26)
+                    .accessibilityElement(children: .combine)
+                }
+                if ranking.background.isEmpty {
+                    Text("Nothing of note.").font(.caption).foregroundStyle(.tertiary).padding(.leading, 26)
+                }
+            }
+        }
     }
 }
 
 struct AppRow: View {
     let app: AppEnergy
+    let top: Double          // the top app's share, so the bars are proportional to the numbers
     @ObservedObject var meter: EnergyMeter
     @State private var hover = false
     @State private var confirmForce = false
@@ -166,10 +217,11 @@ struct AppRow: View {
                 }
             default:
                 Capsule().fill(.quaternary).frame(width: 64, height: 5)
-                    .overlay(alignment: .leading) { Capsule().fill(Brand.amber).frame(width: 64 * app.share) }
+                    .overlay(alignment: .leading) { Capsule().fill(Brand.amber).frame(width: 64 * min(app.share / max(top, 0.001), 1)) }
                     .accessibilityHidden(true)
-                Text(String(format: "%.0f%%", app.cpuPercent)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                Text("\(Int((app.share * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
                     .frame(width: 34, alignment: .trailing)
+                    .help(String(format: "%.0f%% of one processor core over the last few seconds.", app.cpuPercent))
                 if meter.quittable(app) != nil {
                     Button { meter.quit(app) } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(hover ? AnyShapeStyle(.secondary) : AnyShapeStyle(.quaternary))
@@ -184,7 +236,7 @@ struct AppRow: View {
         }
         .onHover { hover = $0 }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(app.name), \(Int(app.cpuPercent)) percent of a processor core")
+        .accessibilityLabel("\(app.name), \(Int((app.share * 100).rounded())) percent of the power in use")
     }
 }
 

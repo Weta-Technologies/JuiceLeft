@@ -175,8 +175,17 @@ import SwiftUI
     check(EnergyMeter.app(for: "/usr/bin/python3").name == "python3" && EnergyMeter.app(for: "/usr/bin/python3").bundle == nil, "bare executable")
     let before: EnergyMeter.Snapshot = [1: (1.0, chrome), 2: (5.0, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (0.0, "/usr/bin/python3"), 4: (2.0, "/bin/zsh")]
     let after: EnergyMeter.Snapshot = [1: (3.0, chrome), 2: (6.0, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (0.5, "/usr/bin/python3"), 5: (9.0, "/bin/zsh")]
-    let ranked = EnergyMeter.rank(before: before, after: after, seconds: 3)
-    check(ranked.map(\.name) == ["Google Chrome", "python3"] && near(ranked[0].cpuPercent, 100, 0.01) && near(ranked[1].share, 0.5 / 3, 0.01), "ranking: \(ranked)")
+    let userApps: Set<String> = ["/Applications/Google Chrome.app"]
+    let ranked = EnergyMeter.rank(before: before, after: after, seconds: 3, apps: userApps)
+    check(ranked.apps.map(\.name) == ["Google Chrome"] && near(ranked.apps[0].cpuPercent, 100, 0.01) && near(ranked.apps[0].share, 3 / 3.5, 0.01), "ranking: apps only, share of the total: \(ranked)")
+    check(ranked.background.map(\.name) == ["python3"] && near(ranked.backgroundShare, 0.5 / 3.5, 0.01), "ranking: the rest rolls up: \(ranked)")
+    let idle: EnergyMeter.Snapshot = [2: (5.02, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (9.0, "/usr/bin/python3")]
+    let quiet = EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps)
+    check(quiet.apps.isEmpty && near(quiet.backgroundShare, 1, 0.01), "ranking: an app below 1% of a core is not listed")
+    check(!EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps, pinned: ["/Applications/Google Chrome.app"]).apps.isEmpty, "ranking: a quitting app stays pinned")
+    check(EnergyMeter.rank(before: before, after: before, seconds: 3, apps: userApps) == Ranking(), "ranking: nothing used, nothing listed")
+    check(EnergyMeter.isUserApp(bundle: "/Applications/SleepLess.app", bundleID: "io.github.cyborgfingers.sleepless", policy: .accessory), "a menu-bar app counts as the user's")
+    check(!EnergyMeter.isUserApp(bundle: "/System/Library/CoreServices/Spotlight.app", bundleID: "com.apple.Spotlight", policy: .accessory), "Spotlight is background")
     check(EnergyMeter.mayQuit(bundle: "/Applications/Safari.app", bundleID: "com.apple.Safari", policy: .regular, isSelf: false), "Safari may quit")
     check(!EnergyMeter.mayQuit(bundle: "/System/Library/CoreServices/Finder.app", bundleID: "com.apple.finder", policy: .regular, isSelf: false), "not Finder")
     check(!EnergyMeter.mayQuit(bundle: "/System/Library/CoreServices/ControlCenter.app", bundleID: "com.apple.controlcenter", policy: .accessory, isSelf: false), "not Control Center")

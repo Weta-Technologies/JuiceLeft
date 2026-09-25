@@ -1,12 +1,19 @@
 import AppKit
 
-/// One app (helpers folded into it) and its share of the CPU time used over the last few seconds.
+/// One app (helpers folded into it) and its share of the processor time used over the last few seconds.
 struct AppEnergy: Identifiable, Equatable {
     let id: String
     let name: String
     let bundle: String?      // the .app, if it is one
-    let cpuPercent: Double   // CPU seconds per second × 100, so one busy core is 100
-    let share: Double        // 0…1 against the top entry, for the bar
+    let cpuPercent: Double   // CPU seconds per second × 100, so one busy core is 100 (the tooltip's figure)
+    let share: Double        // 0…1 of all the processor time measured, the number shown
+}
+
+/// What the panel lists: the user's apps using noticeable power, most first, and everything else rolled up.
+struct Ranking: Equatable {
+    var apps: [AppEnergy] = []          // at most `EnergyMeter.count`, each at least `noticeable`
+    var background: [AppEnergy] = []    // the top few system and background processes, for the disclosure
+    var backgroundShare = 0.0           // all of them together, 0…1
 }
 
 /// Which apps are using the most power right now. Samples every process's CPU time every 3 s — but only while the
@@ -18,11 +25,14 @@ struct AppEnergy: Identifiable, Equatable {
 @MainActor final class EnergyMeter: ObservableObject {
     typealias Snapshot = [pid_t: (cpu: Double, path: String)]
 
-    @Published private(set) var apps: [AppEnergy] = []
+    @Published private(set) var ranking = Ranking()
     @Published private(set) var measuring = false
     @Published private(set) var quitting: [String: Date] = [:]   // app id → when Quit was asked for
+    var apps: [AppEnergy] { ranking.apps }
     static let interval: TimeInterval = 3
     nonisolated static let count = 5
+    nonisolated static let noticeable = 1.0    // % of one core: below this an app isn't worth a row
+    nonisolated static let backgroundShown = 3
     static let forceAfter: TimeInterval = 5
     private var timer: Timer?
     private var previous: Snapshot = [:]
@@ -48,19 +58,27 @@ struct AppEnergy: Identifiable, Equatable {
     private func sample() {
         let before = previous, beforeAt = previousAt
         for (id, _) in quitting where Self.runningApp(id) == nil { quitting[id] = nil }   // gone: the row goes with it
-        let pinned = Set(quitting.keys)
+        let pinned = Set(quitting.keys), apps = Self.userApps()
         DispatchQueue.global(qos: .utility).async {
             let now = Self.snapshot(), at = Date()
-            let ranked = Self.rank(before: before, after: now, seconds: at.timeIntervalSince(beforeAt), pinned: pinned)
+            let ranked = Self.rank(before: before, after: now, seconds: at.timeIntervalSince(beforeAt), apps: apps, pinned: pinned)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.previous = now
                     self.previousAt = at
-                    self.apps = ranked
+                    self.ranking = ranked
                     self.measuring = false
                 }
             }
         }
+    }
+
+    /// The bundles of the user's own apps — ordinary and menu-bar apps, not the system's agents.
+    static func userApps() -> Set<String> {
+        Set(NSWorkspace.shared.runningApplications.compactMap { app in
+            guard let bundle = app.bundleURL?.path, isUserApp(bundle: bundle, bundleID: app.bundleIdentifier, policy: app.activationPolicy) else { return nil }
+            return bundle
+        })
     }
 
     nonisolated private static let timebase: Double = {
@@ -85,9 +103,11 @@ struct AppEnergy: Identifiable, Equatable {
         return out
     }
 
-    /// Pure: CPU used between two snapshots, grouped by app, top `count` first; `pinned` apps stay listed at any level.
-    nonisolated static func rank(before: Snapshot, after: Snapshot, seconds: TimeInterval, pinned: Set<String> = []) -> [AppEnergy] {
-        guard seconds > 0 else { return [] }
+    /// Pure: processor time used between two snapshots, grouped by app. Groups whose bundle is one of the user's
+    /// `apps` make the list (top `count`, each at least `noticeable`, `pinned` ones regardless); everything else is
+    /// rolled into the background share. Shares are of the total measured, so they never pass 100 and add up.
+    nonisolated static func rank(before: Snapshot, after: Snapshot, seconds: TimeInterval, apps: Set<String>, pinned: Set<String> = []) -> Ranking {
+        guard seconds > 0 else { return Ranking() }
         var used: [String: (name: String, bundle: String?, cpu: Double)] = [:]
         for (pid, now) in after {
             guard let then = before[pid], now.path == then.path else { continue }
@@ -95,11 +115,20 @@ struct AppEnergy: Identifiable, Equatable {
             guard now.cpu > then.cpu || pinned.contains(app.key) else { continue }
             used[app.key, default: (app.name, app.bundle, 0)].cpu += max(now.cpu - then.cpu, 0)
         }
+        let total = used.values.reduce(0) { $0 + $1.cpu }
+        guard total > 0 else { return Ranking() }
+        let entry = { (key: String, value: (name: String, bundle: String?, cpu: Double)) in
+            AppEnergy(id: key, name: value.name, bundle: value.bundle, cpuPercent: value.cpu / seconds * 100, share: value.cpu / total)
+        }
         let sorted = used.sorted { $0.value.cpu > $1.value.cpu }
-        let top = sorted.prefix(count) + sorted.dropFirst(count).filter { pinned.contains($0.key) }
-        let most = max(top.first?.value.cpu ?? 0, 0.001)
-        return top.map { AppEnergy(id: $0.key, name: $0.value.name, bundle: $0.value.bundle,
-                                   cpuPercent: $0.value.cpu / seconds * 100, share: $0.value.cpu / most) }
+        let mine = sorted.filter { $0.value.bundle.map(apps.contains) ?? false }
+        let shown = mine.prefix(count).filter { $0.value.cpu / seconds * 100 >= noticeable || pinned.contains($0.key) }
+            + mine.dropFirst(count).filter { pinned.contains($0.key) }
+        let mineKeys = Set(mine.map(\.key))
+        let rest = sorted.filter { !mineKeys.contains($0.key) }
+        return Ranking(apps: shown.map(entry),
+                       background: rest.prefix(backgroundShown).filter { $0.value.cpu / seconds * 100 >= noticeable }.map(entry),
+                       backgroundShare: rest.reduce(0) { $0 + $1.value.cpu } / total)
     }
 
     /// The outermost .app on the path (so a helper inside a framework inside Chrome is Chrome), else the executable.
@@ -122,10 +151,15 @@ struct AppEnergy: Identifiable, Equatable {
                                            "com.apple.controlcenter", "com.apple.WindowManager", "com.apple.notificationcenterui",
                                            "com.apple.Spotlight", "com.apple.CoreServicesUIAgent"]
 
-    /// Pure: a real, quittable user app — an ordinary or menu-bar app the user launched, not this one, not the system's.
-    nonisolated static func mayQuit(bundle: String?, bundleID: String?, policy: NSApplication.ActivationPolicy, isSelf: Bool) -> Bool {
-        guard let bundle, !isSelf, policy != .prohibited, !bundle.hasPrefix("/System/Library/") else { return false }
+    /// Pure: one of the user's apps — an ordinary or menu-bar app they launched, not one of the system's agents.
+    nonisolated static func isUserApp(bundle: String?, bundleID: String?, policy: NSApplication.ActivationPolicy) -> Bool {
+        guard let bundle, policy != .prohibited, !bundle.hasPrefix("/System/Library/") else { return false }
         return !(bundleID.map { untouchable.contains($0) } ?? false)
+    }
+
+    /// Pure: a user app that may be quit from here — any but this one.
+    nonisolated static func mayQuit(bundle: String?, bundleID: String?, policy: NSApplication.ActivationPolicy, isSelf: Bool) -> Bool {
+        !isSelf && isUserApp(bundle: bundle, bundleID: bundleID, policy: policy)
     }
 
     static func runningApp(_ id: String) -> NSRunningApplication? {
