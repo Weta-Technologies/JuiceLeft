@@ -684,7 +684,6 @@ struct History: Codable, Equatable {
             if r.onAC != previous.onAC { plugEdge(r) }
             remindedUnplug = false
             noticedFull = false
-            if !slept, r.onAC != previous.onAC { plugChanged(r) }
         }
         samples.append(Sample(at: r.at, level: r.level, ratePerHour: r.ratePerHour))
         samples.removeAll { r.at.timeIntervalSince($0.at) > 2 * Learner.window }
@@ -693,6 +692,7 @@ struct History: Codable, Equatable {
             history.points.removeAll { r.at.timeIntervalSince($0.t) > History.keep }
         }
         evaluate()
+        if let previous, !slept, r.onAC != previous.onAC { plugChanged(r) }   // after evaluate: "On battery" carries the time to flat, not the charge's
         persist(force: previous.map { $0.onAC != r.onAC } ?? false)
         log?("\(r.percent)% \(r.onAC ? "on power" : "on battery") → \(forecast.map { "\($0.kind) in \(Format.duration($0.minutes))" } ?? "no forecast")")
     }
