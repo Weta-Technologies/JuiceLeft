@@ -18,6 +18,7 @@ struct Settings: Codable, Equatable {
     var menuBarWatts = false     // also show the power draw in the menu bar, e.g. "· −12 W"
     var deviceAlert = false      // notify when a connected accessory's battery gets low
     var deviceAlertAt = 15       // %: the accessory low-battery level
+    var hotKey: HotKey.Spec?     // a global shortcut that opens the panel; nil = none
     var replaceSystemIcon = true // hide Apple's battery item while JuiceLeft runs
     var insight = true           // the plain-English line (Apple Intelligence phrases it when available)
     var smartLowPower = true     // Low Power Mode by itself at 30 % (or under an hour left), back on the charger
@@ -37,6 +38,8 @@ struct Settings: Codable, Equatable {
               var saved = try? JSONSerialization.jsonObject(with: stored) as? [String: Any] else { return Settings() }
         // A choice this version no longer offers falls back to the default, without costing the other settings.
         if let style = saved["menuBar"] as? String, !MenuBar.allCases.contains(where: { $0.rawValue == style }) { saved["menuBar"] = nil }
+        // A shortcut that isn't shaped like one (a hand-edited plist) is dropped, not the settings around it.
+        if let h = saved["hotKey"], !((h as? [String: Any]).map { $0["keyCode"] is NSNumber && $0["key"] is String && $0["modifiers"] is NSNumber } ?? false) { saved["hotKey"] = nil }
         guard let merged = try? JSONSerialization.data(withJSONObject: base.merging(saved) { $1 }),
               let settings = try? JSONDecoder().decode(Settings.self, from: merged)
         else { return Settings() }
@@ -51,6 +54,7 @@ struct Settings: Codable, Equatable {
         s.deviceAlertAt = max(5, min(50, s.deviceAlertAt))
         s.volume = max(0, min(1, s.volume))
         s.brightnessCapLevel = max(0.2, min(0.8, s.brightnessCapLevel))
+        if let h = s.hotKey { s.hotKey = h.isValid ? HotKey.Spec(keyCode: h.keyCode, key: h.key, modifiers: h.modifiers & HotKey.Spec.mask.rawValue) : nil }
         return s
     }
 }
@@ -130,6 +134,7 @@ struct History: Codable, Equatable {
             defaults.set(try? JSONEncoder().encode(s), forKey: Settings.key)
             if !s.armed { tone.stop() }
             if s.deviceAlert != oldValue.deviceAlert { updateDeviceTimer() }
+            if Self.wantsNotifications(s), !Self.wantsNotifications(oldValue) { requestNotifications() }   // macOS asks its permission now, not before
             if s.replaceSystemIcon != oldValue.replaceSystemIcon {
                 if s.replaceSystemIcon {
                     let moved = SystemBattery.takePosition(remembering: defaults)
@@ -175,6 +180,7 @@ struct History: Codable, Equatable {
     let insight = Insight()
     var log: ((String) -> Void)?                                // --simulate prints what happens
     var onReposition: (() -> Void)?                             // the status item re-reads its saved place
+    var onOpenPanel: (() -> Void)?                              // the global shortcut: the status item opens (or closes) the panel
 
     static let snooze: TimeInterval = 30 * 60
     static let unplugAt = 80
@@ -277,14 +283,36 @@ struct History: Codable, Equatable {
                 self.evaluate()
             }
         }
+        if Self.wantsNotifications(s) { requestNotifications() }
+        if interactive {
+            HotKey.action = { [weak self] in self?.onOpenPanel?() }
+            if let why = HotKey.set(s.hotKey) { note = why }
+        }
+        source.start()
+        updateDeviceTimer()
+    }
+
+    /// Any setting that posts a notification: macOS's permission is asked for the first time one is turned on
+    /// (the low-battery notification is on by default, so on a fresh install that is the first launch).
+    nonisolated static func wantsNotifications(_ s: Settings) -> Bool { s.notify || s.fullNotice || s.plugNotices || s.unplugReminder || s.deviceAlert }
+
+    private func requestNotifications() {
         Notifier.setUp { [weak self] allowed in
             MainActor.assumeIsolated {
                 self?.notificationsAllowed = allowed
                 self?.log?("notifications \(allowed.map { $0 ? "allowed" : "denied" } ?? "not decided")")
             }
         }
-        source.start()
-        updateDeviceTimer()
+    }
+
+    /// The panel's recorder: the shortcut is registered first, and kept only if macOS accepts it.
+    func setHotKey(_ spec: HotKey.Spec?) {
+        if let why = HotKey.set(spec) {
+            note = why
+            HotKey.set(s.hotKey)   // the one that was there stays registered
+        } else {
+            s.hotKey = spec
+        }
     }
 
     // MARK: User actions
@@ -680,9 +708,10 @@ struct History: Codable, Equatable {
             remindedUnplug = true
             notify(id: "unplug", title: "Battery at \(r.percent)%", body: "Unplugging now is kinder to the battery than sitting at 100%.")
         }
-        if s.fullNotice, r.full, !noticedFull {
+        if s.fullNotice, !noticedFull, let title = Self.fullNotice(full: r.full, onAC: r.onAC, charging: r.charging, percent: r.percent,
+                                                                    limit: travelFull == nil ? chargeLimit.flatMap { $0.enabled ? $0.limit : nil } : nil) {
             noticedFull = true
-            notify(id: "full", title: "Fully charged", body: "You can unplug.")
+            notify(id: "full", title: title, body: "You can unplug.")
         }
         let minutes = forecast.map { steady.update($0.minutes) }
         let wattsText = s.menuBarWatts ? r.batteryWatts.flatMap { abs($0) >= 0.5 ? Format.signedWatts($0) : nil } : nil
@@ -693,6 +722,14 @@ struct History: Codable, Equatable {
         light.update(enabled: s.light, onAC: r.onAC, charging: r.charging && !r.full, percent: r.percent, alertAt: s.alertAt,
                      behaviour: s.lightBehaviour, greenAtLimit: s.lightGreenAtLimit, fastWhenLow: s.lightFastWhenLow, now: r.at)
         insight.update(facts, ai: s.insight)
+    }
+
+    /// The "Tell me when it's full" notice: full — or held at the charge limit, once charging has stopped there
+    /// short of 100 %. Never while charging through the limit (a top-up), never on battery. Pure, for --selftest.
+    nonisolated static func fullNotice(full: Bool, onAC: Bool, charging: Bool, percent: Int, limit: Int?) -> String? {
+        guard onAC else { return nil }
+        if let limit, limit < 100, !charging, percent >= limit, percent < 100 { return "Held at \(limit)%" }
+        return full ? "Fully charged" : nil
     }
 
     private func notify(id: String, title: String, body: String) {

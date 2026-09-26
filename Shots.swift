@@ -22,21 +22,23 @@ import SwiftUI
         let low = Forecast(kind: .flat, minutes: 40, at: now.addingTimeInterval(40 * 60), ratePerHour: 27, learned: true)
         let limit = ChargeLimit.State(enabled: true, limit: 80, available: ChargeLimit.steps)
         let power = PowerMode.State(battery: .automatic, adapter: .automatic, highPowerSupported: true)
-        let make = { (percent: Int, onAC: Bool, forecast: Forecast?, phase: Alerts.Phase, tips: [Tip]) in
-            Monitor(shots: Settings(), reading: reading(percent: percent, onAC: onAC, at: now), forecast: forecast, phase: phase, history: history(now: now),
+        let make = { (percent: Int, onAC: Bool, forecast: Forecast?, phase: Alerts.Phase, tips: [Tip], settings: Settings) in
+            Monitor(shots: settings, reading: reading(percent: percent, onAC: onAC, at: now), forecast: forecast, phase: phase, history: history(now: now),
                     tips: tips, ranking: ranking, chargeLimit: limit, power: power, devices: devices, defaults: defaults, source: source)
         }
+        var shortcut = Settings()
+        shortcut.hotKey = HotKey.Spec(keyCode: 38, key: "J", modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue)
         let dim = Tip(id: "brightness", text: "Screen at 85%: dim to 40%", gain: 41, estimated: true, fix: .dim(to: 0.4))
         let hog = Tip(id: "app", text: "Safari is working hard: 62% of a core", gain: 25, estimated: true, fix: .quit(app: "Safari"))
         let lowPower = Tip(id: "lowpower", text: "Under 30% with Low Power off", gain: 22, estimated: true, fix: .lowPower)
         let states: [(name: String, monitor: Monitor, expanded: [String])] = [
             ("setup", Monitor(shots: Settings(), reading: reading(percent: 84, onAC: false, at: now), forecast: nil, helperReady: false, aiStatus: .notEnabled,
                               welcome: true, defaults: defaults, source: source), []),
-            ("battery", make(84, false, flat, .clear, [dim, hog]), []),
-            ("charging", make(62, true, full, .clear, []), ["stretchExpanded", "chargingExpanded"]),
-            ("warning", make(18, false, low, .warning, [lowPower]), ["alertsExpanded"]),
-            ("update", make(84, false, flat, .clear, [dim]), ["healthExpanded"]),
-            ("history", make(84, false, flat, .clear, []), ["historyExpanded", "devicesExpanded"]),
+            ("battery", make(84, false, flat, .clear, [dim, hog], Settings()), []),
+            ("charging", make(62, true, full, .clear, [], Settings()), ["stretchExpanded", "chargingExpanded"]),
+            ("warning", make(18, false, low, .warning, [lowPower], Settings()), ["alertsExpanded"]),
+            ("history", make(84, false, flat, .clear, [], shortcut), ["historyExpanded", "devicesExpanded"]),
+            ("update", make(84, false, flat, .clear, [dim], Settings()), ["healthExpanded"]),   // last: the sample update card stays offered
         ]
         for state in states {
             if state.name == "update" { Updater.shared.offerSample() }

@@ -422,16 +422,43 @@ import SwiftUI
     check(URLAction.parse(URL(string: "juiceleft://savebattery?on=1&and=delete")!) == nil && URLAction.parse(URL(string: "juiceleft://topup?x=1")!) == nil, "extra parameters rejected")
     check(URLAction.parse(URL(string: "juiceleft://wipe?all=1")!) == nil && URLAction.parse(URL(string: "https://evil.example/mode?set=low")!) == nil && URLAction.parse(URL(string: "juiceleft://?on=1")!) == nil, "unknown host, wrong scheme, no host")
 
-    // New settings decode to their defaults from an older blob, and take a saved value (clamped) from a newer one.
+    // The global shortcut: the label in the menu bar's order, Carbon's flags, and only combinations that can't steal plain typing.
+    check(HotKey.Spec.label(modifiers: [.command, .shift, .option, .control], key: "J") == "⌃⌥⇧⌘J" && HotKey.Spec.label(modifiers: [], key: "F5") == "F5", "shortcut label")
+    check(HotKey.Spec.valid(keyCode: 38, modifiers: [.control, .option]) && HotKey.Spec.valid(keyCode: 96, modifiers: []), "⌃⌥J and F5 are shortcuts")
+    check(!HotKey.Spec.valid(keyCode: 38, modifiers: .shift) && !HotKey.Spec.valid(keyCode: 38, modifiers: []), "⇧J and J alone are typing, not shortcuts")
+    let ctrlOpt = NSEvent.ModifierFlags([.control, .option]).rawValue
+    check(HotKey.Spec(keyCode: 38, key: "J", modifiers: ctrlOpt).carbonModifiers == 0x1000 | 0x0800, "carbon flags: controlKey | optionKey")
+    check(Settings.load(UserDefaults(suiteName: "io.github.cyborgfingers.juiceleft.selftest.none")!).hotKey == nil, "no shortcut by default")
+
+    // The full notice: full — or held at the charge limit; never while charging through it (a top-up), never on battery.
+    check(Monitor.fullNotice(full: true, onAC: true, charging: false, percent: 100, limit: nil) == "Fully charged", "full, no limit")
+    check(Monitor.fullNotice(full: false, onAC: true, charging: false, percent: 80, limit: 80) == "Held at 80%", "held at the limit")
+    check(Monitor.fullNotice(full: true, onAC: true, charging: false, percent: 80, limit: 80) == "Held at 80%", "macOS calls a held battery charged: still 'held'")
+    check(Monitor.fullNotice(full: false, onAC: true, charging: true, percent: 85, limit: 80) == nil && Monitor.fullNotice(full: false, onAC: true, charging: false, percent: 60, limit: 80) == nil, "charging through the limit, or under it: nothing")
+    check(Monitor.fullNotice(full: false, onAC: false, charging: false, percent: 80, limit: 80) == nil && Monitor.fullNotice(full: false, onAC: true, charging: false, percent: 90, limit: 100) == nil, "on battery, or no limit: nothing")
+
+    // A 1.2.1 settings blob decodes unchanged; the new fields take their defaults; a newer blob keeps (and clamps) its values.
     let suite13 = "io.github.cyborgfingers.juiceleft.selftest13"
     let d13 = UserDefaults(suiteName: suite13)!
-    d13.set(#"{"warnAt":20}"#.data(using: .utf8), forKey: Settings.key)
+    let blob121 = #"{"armed":false,"warnAt":25,"alertAt":7,"tone":"Glass","volume":0.5,"repeatMinutes":2,"notify":false,"unplugReminder":true,"fullNotice":true,"plugNotices":true,"menuBar":"compact","replaceSystemIcon":false,"insight":false,"smartLowPower":false,"brightnessCap":true,"brightnessCapLevel":0.6,"heatGuard":false,"light":false,"lightBehaviour":"blink","lightGreenAtLimit":false,"lightFastWhenLow":false}"#
+    var want121 = Settings()
+    want121.armed = false; want121.warnAt = 25; want121.alertAt = 7; want121.tone = "Glass"; want121.volume = 0.5; want121.repeatMinutes = 2; want121.notify = false
+    want121.unplugReminder = true; want121.fullNotice = true; want121.plugNotices = true; want121.menuBar = .compact; want121.replaceSystemIcon = false; want121.insight = false
+    want121.smartLowPower = false; want121.brightnessCap = true; want121.brightnessCapLevel = 0.6; want121.heatGuard = false; want121.light = false
+    want121.lightBehaviour = .blink; want121.lightGreenAtLimit = false; want121.lightFastWhenLow = false
+    d13.set(blob121.data(using: .utf8), forKey: Settings.key)
     let old = Settings.load(d13)
-    check(!old.menuBarWatts && !old.deviceAlert && old.deviceAlertAt == 15, "new fields default on an older blob: \(old)")
-    d13.set(#"{"menuBarWatts":true,"deviceAlert":true,"deviceAlertAt":999}"#.data(using: .utf8), forKey: Settings.key)
+    check(old == want121, "a 1.2.1 blob decodes unchanged, new fields at their defaults: \(old)")
+    check(!old.menuBarWatts && !old.deviceAlert && old.deviceAlertAt == 15 && old.hotKey == nil, "new fields default on an older blob: \(old)")
+    d13.set(#"{"menuBarWatts":true,"deviceAlert":true,"deviceAlertAt":999,"hotKey":{"keyCode":38,"key":"J","modifiers":\#(ctrlOpt)}}"#.data(using: .utf8), forKey: Settings.key)
     let new = Settings.load(d13)
+    check(new.menuBarWatts && new.deviceAlert && new.deviceAlertAt == 50 && new.hotKey == HotKey.Spec(keyCode: 38, key: "J", modifiers: ctrlOpt), "new fields kept and clamped: \(new)")
+    d13.set(#"{"warnAt":25,"hotKey":"nope"}"#.data(using: .utf8), forKey: Settings.key)
+    let odd = Settings.load(d13)
+    check(odd.warnAt == 25 && odd.hotKey == nil, "a malformed shortcut is dropped without costing the other settings: \(odd)")
+    d13.set(#"{"hotKey":{"keyCode":38,"key":"J","modifiers":\#(NSEvent.ModifierFlags.shift.rawValue)}}"#.data(using: .utf8), forKey: Settings.key)
+    check(Settings.load(d13).hotKey == nil, "a shortcut that would steal typing is dropped")
     d13.removePersistentDomain(forName: suite13)
-    check(new.menuBarWatts && new.deviceAlert && new.deviceAlertAt == 50, "new fields kept and clamped: \(new)")
 
     Updater.selfTest()   // versions, the release feed, signatures, the swap script on a fake bundle
 

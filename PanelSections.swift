@@ -637,7 +637,10 @@ struct ChargingCard: View {
             Divider()
             SwitchRow(title: "Remind me to unplug at \(Monitor.unplugAt)%", subtitle: "Lithium batteries age slowest between 20 and 80%",
                       help: "A notification once per charge when the battery reaches \(Monitor.unplugAt)%.", isOn: $monitor.s.unplugReminder)
-            SwitchRow(title: "Tell me when it's full", help: "A notification when the battery reports fully charged.", isOn: $monitor.s.fullNotice)
+            SwitchRow(title: "Tell me when it's full", subtitle: ChargeLimit.supported ? "Or held at the charge limit" : nil,
+                      help: ChargeLimit.supported ? "A notification when the battery reports fully charged — or, with a charge limit on, when it stops there (“Held at 80%”)."
+                                                  : "A notification when the battery reports fully charged.",
+                      isOn: $monitor.s.fullNotice)
             SwitchRow(title: "Charger plugged in or out", subtitle: "Which charger, and the time to flat when unplugged",
                       help: "A notification on every plug and unplug.", isOn: $monitor.s.plugNotices)
             if monitor.light.available { LightRows(monitor: monitor, light: monitor.light) }
@@ -678,6 +681,16 @@ struct GeneralRows: View {
                 SwitchRow(title: "Show the power draw too", subtitle: "“−12 W” on battery, “+45 W” charging",
                           help: "Adds what is flowing out of (or into) the battery to the menu-bar item. Off keeps Apple's look exactly.",
                           isOn: $monitor.s.menuBarWatts)
+            }
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Keyboard shortcut").font(.callout)
+                    Text(monitor.s.hotKey.map { "\($0.label) opens the panel, from any app" } ?? "Opens the panel from any app")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 6)
+                ShortcutRecorder(spec: Binding(get: { monitor.s.hotKey }, set: { monitor.setHotKey($0) })).fixedSize()
+                    .help("Click, then press the keys: ⌘, ⌥ or ⌃ with a key, or a function key. Press it again anywhere to close the panel. Esc keeps what was there; Delete removes it. No permission needed.")
             }
             SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
                       help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",

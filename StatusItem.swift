@@ -38,6 +38,10 @@ import SwiftUI
             self.item.autosaveName = nil
             self.item.autosaveName = "Item-0"
         }
+        monitor.onOpenPanel = { [weak self] in   // the global shortcut: open, or close if it is up
+            guard let self else { return }
+            if self.popover.isShown { self.close() } else { self.open() }
+        }
         guard let button = item.button else { return }
         button.target = self
         button.action = #selector(clicked)
@@ -106,7 +110,7 @@ import SwiftUI
     private func sawLocal(_ event: NSEvent) -> Bool {
         guard popover.isShown else { return false }
         if event.type == .keyDown {
-            guard event.keyCode == 53 else { return false }
+            guard event.keyCode == 53, !HotKey.recording else { return false }   // Esc while recording a shortcut cancels that instead
             close()
             return true
         }
