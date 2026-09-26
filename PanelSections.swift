@@ -448,36 +448,69 @@ struct LevelChart: View {
     var hours = 12.0
     let warnAt: Int
     let alertAt: Int
+    static let labelHeight: CGFloat = 12
+
+    /// The time labels under the chart, as fractions along the window: the start, the middle and "Now" for a day or
+    /// less; the weekday at each noon in a three-day window. Clock times in the user's locale. Pure, for --selftest.
+    static func ticks(now: Date, hours: Double, calendar: Calendar = .current) -> [(fraction: Double, text: String)] {
+        let span = hours * 3600, from = now.addingTimeInterval(-span)
+        if hours <= 24 {
+            return [(0, from.formatted(.dateTime.hour())), (0.5, from.addingTimeInterval(span / 2).formatted(.dateTime.hour())), (1, "Now")]
+        }
+        var ticks: [(fraction: Double, text: String)] = []
+        var day = calendar.startOfDay(for: from)
+        while day <= now, let next = calendar.date(byAdding: .day, value: 1, to: day) {
+            let noon = day.addingTimeInterval(12 * 3600), fraction = noon.timeIntervalSince(from) / span
+            if fraction > 0.04, fraction < 0.96 { ticks.append((fraction, noon.formatted(.dateTime.weekday(.abbreviated)))) }
+            day = next
+        }
+        return ticks
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
-            let from = now.addingTimeInterval(-hours * 3600)
-            let recent = points.filter { $0.t >= from }
-            let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (hours * 3600)) * w }
-            let y = { (l: Double) in h * CGFloat(1 - l / 100) }
-            ZStack(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.04))
-                Rectangle().fill(Color.red.opacity(0.10)).frame(height: h * CGFloat(alertAt) / 100)
-                Path { p in p.move(to: CGPoint(x: 0, y: y(Double(warnAt)))); p.addLine(to: CGPoint(x: w, y: y(Double(warnAt)))) }
-                    .stroke(Color.orange.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                ForEach([false, true], id: \.self) { charging in
-                    Path { p in
-                        var previous: History.Point?
-                        for point in recent where point.c == charging {
-                            let at = CGPoint(x: x(point.t), y: y(point.l))
-                            if let previous, point.t.timeIntervalSince(previous.t) < 5 * 60 { p.addLine(to: at) } else { p.move(to: at) }
-                            previous = point
+        VStack(spacing: 2) {
+            GeometryReader { geo in
+                let w = geo.size.width, h = geo.size.height
+                let from = now.addingTimeInterval(-hours * 3600)
+                let recent = points.filter { $0.t >= from }
+                let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (hours * 3600)) * w }
+                let y = { (l: Double) in h * CGFloat(1 - l / 100) }
+                ZStack(alignment: .bottomLeading) {
+                    RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.04))
+                    Rectangle().fill(Color.red.opacity(0.10)).frame(height: h * CGFloat(alertAt) / 100)
+                    Path { p in p.move(to: CGPoint(x: 0, y: y(50))); p.addLine(to: CGPoint(x: w, y: y(50))) }   // the 50 % hairline
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    Path { p in p.move(to: CGPoint(x: 0, y: y(Double(warnAt)))); p.addLine(to: CGPoint(x: w, y: y(Double(warnAt)))) }
+                        .stroke(Color.orange.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    ForEach([false, true], id: \.self) { charging in
+                        Path { p in
+                            var previous: History.Point?
+                            for point in recent where point.c == charging {
+                                let at = CGPoint(x: x(point.t), y: y(point.l))
+                                if let previous, point.t.timeIntervalSince(previous.t) < 5 * 60 { p.addLine(to: at) } else { p.move(to: at) }
+                                previous = point
+                            }
                         }
+                        .stroke(charging ? Color.green : Color.accentColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                     }
-                    .stroke(charging ? Color.green : Color.accentColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                }
-                if recent.count < 2 {
-                    Text("Not enough history yet").font(.caption2).foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text("100%").font(.caption2).foregroundStyle(.tertiary).position(x: 14, y: 6)
+                    Text("50%").font(.caption2).foregroundStyle(.tertiary).position(x: 12, y: y(50) - 6)
+                    if recent.count < 2 {
+                        Text("Not enough history yet").font(.caption2).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
+            GeometryReader { geo in   // the time labels: fixed height, so the card never moves
+                let w = geo.size.width
+                ForEach(Array(Self.ticks(now: now, hours: hours).enumerated()), id: \.offset) { _, tick in
+                    Text(tick.text).font(.caption2).foregroundStyle(.tertiary).fixedSize()
+                        .position(x: tick.fraction <= 0 ? 12 : tick.fraction >= 1 ? w - 12 : min(max(tick.fraction * w, 12), w - 12), y: Self.labelHeight / 2)
+                }
+            }
+            .frame(height: Self.labelHeight)
         }
+        .accessibilityElement(children: .ignore)   // one element: the card gives it the label
     }
 }
 
@@ -517,7 +550,7 @@ struct HistoryCard: View {
             .help("How far back the chart looks.")
             if let r = monitor.reading {
                 LevelChart(points: monitor.history.points, now: r.at, hours: Double(hours), warnAt: monitor.s.warnAt, alertAt: monitor.s.alertAt)
-                    .frame(height: 72)
+                    .frame(height: 72 + LevelChart.labelHeight + 2)
                     .accessibilityLabel("Battery level over the last \(ranges.first { $0.0 == hours }?.1 ?? "day"): \(subtitle)")
             }
             HStack(spacing: 12) {

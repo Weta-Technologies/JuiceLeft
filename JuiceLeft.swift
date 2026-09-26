@@ -399,11 +399,18 @@ import SwiftUI
     check(sum?.from == 100 && sum?.to == 84 && near(sum?.drainPerHour ?? 0, 8, 0.05), "history summary: \(String(describing: sum))")
     check(History.summary([], since: at(0)) == nil && History.summary([History.Point(t: at(0), l: 50, w: nil, c: false)], since: at(0)) == nil, "summary needs two points")
 
+    // The chart's time labels: start, middle and Now over a day; a weekday at each noon inside three days.
+    let dayTicks = LevelChart.ticks(now: t0, hours: 24)
+    check(dayTicks.count == 3 && dayTicks[0].fraction == 0 && dayTicks[1].fraction == 0.5 && dayTicks[2] == (1, "Now") && !dayTicks[0].text.isEmpty, "a day's ticks: \(dayTicks)")
+    let dayNames = LevelChart.ticks(now: t0, hours: 72)
+    check((2...3).contains(dayNames.count) && dayNames.allSatisfy { $0.fraction > 0 && $0.fraction < 1 && !$0.text.isEmpty }
+          && zip(dayNames, dayNames.dropFirst()).allSatisfy { $0.fraction < $1.fraction }, "three days' ticks: \(dayNames)")
+
     // Accessory batteries: a Bluetooth mouse parses; a wired or level-less entry doesn't; the name gives the kind.
     check(AccessoryBattery.parse(["BatteryPercent": 55, "Product": "Magic Mouse", "Transport": "Bluetooth", "DeviceAddress": "aa:bb"]) == AccessoryBattery.Device(id: "aa:bb", name: "Magic Mouse", percent: 55, kind: .mouse), "mouse parses")
     check(AccessoryBattery.parse(["BatteryPercent": 80, "Product": "Magic Keyboard", "Transport": "USB"]) == nil, "wired accessory skipped")
     check(AccessoryBattery.parse(["Product": "Magic Trackpad", "Transport": "Bluetooth"]) == nil && AccessoryBattery.parse(["BatteryPercent": 0, "Product": "Magic Mouse"]) == nil, "no level, no device")
-    check(AccessoryBattery.kind(for: "Office Magic Trackpad") == .trackpad && AccessoryBattery.kind(for: "K380 Keyboard") == .keyboard && AccessoryBattery.kind(for: "Studio Display") == .other, "kinds")
+    check(AccessoryBattery.kind(for: "Office Magic Trackpad") == .trackpad && AccessoryBattery.kind(for: "Office Keyboard") == .keyboard && AccessoryBattery.kind(for: "Studio Display") == .other, "kinds")
 
     // The low-accessory latch fires once, clears with hysteresis, and forgets a device that goes away.
     let mouse = { (p: Int) in AccessoryBattery.Device(id: "m", name: "Magic Mouse", percent: p, kind: .mouse) }
