@@ -175,19 +175,19 @@ enum Tips {
         let minutes = { (s: Saving) in s.minutes(level: f.level, ratePerHour: rate) }
         if let b = f.brightness, b >= brightScreen {
             let s = savings.brightness(from: b, to: dimTo, rate: rate)
-            tips.append(Tip(id: "brightness", text: "Screen at \(Int((b * 100).rounded()))% — dim it to \(Int(dimTo * 100))%", gain: minutes(s), estimated: !s.learned, fix: .dim(to: dimTo)))
+            tips.append(Tip(id: "brightness", text: "Screen at \(Int((b * 100).rounded()))%: dim to \(Int(dimTo * 100))%", gain: minutes(s), estimated: !s.learned, fix: .dim(to: dimTo)))
         }
         if f.keyboardOn, let ambient = f.ambient, ambient >= litRoom {
             let s = Savings.keyboard()
-            tips.append(Tip(id: "keyboard", text: "Keyboard light on in a bright room — turn it off", gain: minutes(s), estimated: true, fix: .keyboardOff))
+            tips.append(Tip(id: "keyboard", text: "Keyboard light on in a bright room", gain: minutes(s), estimated: true, fix: .keyboardOff))
         }
         if !f.lowPower, f.percent <= lowPowerBelow {
             let s = savings.lowPower(rate: rate)
-            tips.append(Tip(id: "lowpower", text: "Under \(lowPowerBelow)% with Low Power off — turn it on", gain: minutes(s), estimated: !s.learned, fix: .lowPower))
+            tips.append(Tip(id: "lowpower", text: "Under \(lowPowerBelow)% with Low Power off", gain: minutes(s), estimated: !s.learned, fix: .lowPower))
         }
         if let app = f.topApp, app.share >= hogShare, app.cpuPercent >= hogCore, let watts = f.batteryWatts {
             let s = Savings.quitting(cpuPercent: app.cpuPercent, batteryWatts: watts)
-            tips.append(Tip(id: "app", text: "\(app.name) is working hard (\(Int(app.cpuPercent.rounded()))% of a core) — quit it", gain: minutes(s), estimated: true, fix: .quit(app: app.name)))
+            tips.append(Tip(id: "app", text: "\(app.name) is working hard: \(Int(app.cpuPercent.rounded()))% of a core", gain: minutes(s), estimated: true, fix: .quit(app: app.name)))
         }
         let hungry = f.usbDevices.filter { $0.milliamps >= usbNoticeable }
         if let first = hungry.first {

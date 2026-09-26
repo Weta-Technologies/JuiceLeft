@@ -4,11 +4,11 @@ import Security
 import SwiftUI
 import UserNotifications
 
-/// Automatic updates from the app's GitHub releases — one file, the same in every CyborgFingers app. Everything
+/// Automatic updates from the app's GitHub releases — one file, the same in every Weta Technologies app. Everything
 /// per-app comes from the bundle: name, version and bundle id (the repo is Weta-Technologies/<name>).
 ///
 /// Checking: GET api.github.com/repos/<repo>/releases/latest (ETag-cached, 15 s timeout), first about 10 s after
-/// launch and then once a day while "Check for updates automatically" is on, or from the Check for Updates button.
+/// launch and then once a day while "Check for updates automatically" is on, or from the Check Now button.
 /// A background check that fails stays silent. A release counts when its tag is a higher semantic version than
 /// CFBundleShortVersionString (pre-releases never do) and it carries `<App>.app.zip` and `<App>.app.zip.sig`.
 ///
@@ -23,7 +23,7 @@ import UserNotifications
 /// `--update-test <feed URL> <public key> [log file]`: the same flow against a local server and a test key, on a
 /// copy of the app (test-update.sh) — its own settings domain, nothing else of the app running, each step logged.
 @MainActor final class Updater: ObservableObject {
-    /// The CyborgFingers publisher key (Ed25519, base64). Its private half lives only in the publisher's Keychain.
+    /// The publisher key (Ed25519, base64). Its private half lives only in the publisher's Keychain.
     static let publisherKey = "s2ZRMsc27le7fBWfKvoXlSg1eTRjl1jFnB2Va+vVuv4="
     static let shared = Updater()
     static let firstCheckDelay: TimeInterval = 10
@@ -142,6 +142,13 @@ import UserNotifications
         self.timer = timer
     }
 
+    /// --shots: a sample release on offer, so the update card can be rendered without a network or a release.
+    func offerSample() {
+        let next = Version("\(currentVersion.parts.first ?? 1).\((currentVersion.parts.dropFirst().first ?? 0) + 1).0")!
+        let page = URL(string: "https://github.com/Weta-Technologies/\(appName)/releases/tag/v\(next)")!
+        state = .available(Release(version: next, tag: "v\(next)", notes: "Sample release notes: what changed, in a line or two.", page: page, zip: page, signature: page))
+    }
+
     private func checkIfDue() {
         guard automatic, lastChecked.map({ Date().timeIntervalSince($0) >= Self.checkInterval }) ?? true else { return }
         check(manual: false)
@@ -249,7 +256,7 @@ import UserNotifications
         }
         defer { try? FileManager.default.removeItem(at: zip) }
         guard Self.verify(data, signature: signature, key: key) else {
-            return fail(release, "The download's signature doesn't match CyborgFingers' key, so it was not installed.")
+            return fail(release, "The download's signature doesn't match Weta Technologies' signing key, so it was not installed.")
         }
         log("signature OK (\(data.count) bytes)")
         state = .installing(release)
@@ -593,15 +600,12 @@ struct UpdateCard: View {
                         Button("Skip") { updater.skip() }.help("Skip this version: no more reminders about \(release.version.description).")
                         Button("Later") { updater.later() }.help("Hide this until the next check.")
                         Button("Update Now") { updater.install() }.buttonStyle(.borderedProminent)
-                            .help("Downloads \(updater.appName) \(release.version.description), checks CyborgFingers' signature on it, then quits and reopens as the new version. Your settings are kept.")
+                            .help("Downloads \(updater.appName) \(release.version.description), checks Weta Technologies' signature on it, then quits and reopens as the new version. Your settings are kept.")
                     }
                     .controlSize(.small)
-                    HStack(spacing: 3) {
-                        Text("By updating you accept the \(updater.appName)")
-                        Link("licence", destination: updater.licenceURL)
-                        Text("· settings are kept")
-                    }
-                    .font(.caption2).foregroundStyle(.secondary)
+                    Text((try? AttributedString(markdown: "By updating you accept the \(updater.appName) [licence](\(updater.licenceURL.absoluteString)). Your settings are kept."))
+                         ?? AttributedString("By updating you accept the \(updater.appName) licence. Your settings are kept."))
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(10)
@@ -643,7 +647,7 @@ struct UpdateRows: View {
                     .toggleStyle(.checkbox)
                     .help("About once a day, \(updater.appName) asks GitHub whether a newer release exists — a plain web request, nothing about you or your Mac. Updates are only installed when you click Update Now.")
                 Spacer()
-                Button(checking ? "Checking…" : "Check for Updates") { updater.check(manual: true) }
+                Button(checking ? "Checking…" : "Check Now") { updater.check(manual: true) }
                     .disabled(checking)
                     .help("Ask GitHub now whether a newer \(updater.appName) exists.")
             }

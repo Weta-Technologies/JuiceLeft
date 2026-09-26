@@ -4,4 +4,4 @@ This installer puts JuiceLeft into your Applications folder and sets up its help
 
 JuiceLeft then opens in your menu bar, taking the place of Apple's battery icon (quit it and Apple's comes back). It runs on Apple Silicon Macs with a battery and macOS 13 or later. If JuiceLeft is already running, it is quit and replaced; your settings and everything it has learned are kept.
 
-Developed by Weta Technologies Limited · GitHub: CyborgFingers.
+Developed by Weta Technologies Limited.

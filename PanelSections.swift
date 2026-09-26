@@ -593,7 +593,7 @@ struct LightRows: View {
                       help: "A fast orange blink until the battery is above the tone level, then the pattern above.", isOn: $monitor.s.lightFastWhenLow)
             if light.needsSetup {
                 HStack(spacing: 8) {
-                    Text("The light needs JuiceLeft's helper — your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
+                    Text("Your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 6)
                     Button("Set up…") { monitor.setUpHelper() }.controlSize(.small)

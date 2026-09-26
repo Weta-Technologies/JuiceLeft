@@ -35,7 +35,7 @@ struct Panel: View {
         .frame(maxHeight: Self.maxHeight)
     }
 
-    private var content: some View {
+    var content: some View {   // internal: --shots renders it whole, without the scroll view's height cap
         VStack(alignment: .leading, spacing: 12) {
             StatusHeader(monitor: monitor)
             InsightLine(monitor: monitor, insight: monitor.insight)
@@ -46,19 +46,15 @@ struct Panel: View {
             }
             TipRows(monitor: monitor)
             EnergyModeRow(monitor: monitor)
-            if monitor.welcome {
-                Notice(text: "JuiceLeft has taken the place of the macOS battery icon. Turn “Replace the macOS battery icon” off below to bring it back; quitting brings it back too.", kind: .info) {
-                    withAnimation(reduceMotion ? nil : panelEase) { monitor.dismissWelcome() }
-                }
-                .transition(.opacity)
-            }
             if let note = monitor.note {
                 Notice(text: note, kind: .warning) { monitor.note = nil }
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
-            if !tapHintSeen {
-                Notice(text: "Tip: click the menu-bar item for this panel. Press and hold it to turn monitoring on or off without opening anything.", kind: .tip) {
-                    withAnimation(reduceMotion ? nil : panelEase) { tapHintSeen = true }
+            if monitor.welcome || !tapHintSeen {   // first launch: one notice, one dismiss
+                Notice(text: [monitor.welcome ? "JuiceLeft has taken the place of the macOS battery icon; the switch below brings it back." : nil,
+                              tapHintSeen ? nil : "Click the item for this panel. Press and hold it to turn monitoring on or off."].compactMap { $0 }.joined(separator: " "),
+                       kind: monitor.welcome ? .info : .tip) {
+                    withAnimation(reduceMotion ? nil : panelEase) { monitor.dismissWelcome(); tapHintSeen = true }
                 }
                 .transition(.opacity)
             }
@@ -92,14 +88,17 @@ struct Panel: View {
             UpdateRows(updater: .shared)
             VStack(spacing: 2) {
                 HStack(spacing: 4) {
-                    Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · GitHub:")
-                    Link("CyborgFingers", destination: URL(string: "https://github.com/CyborgFingers")!)
-                        .help("github.com/CyborgFingers — source, releases and issues at github.com/Weta-Technologies/JuiceLeft")
-                    Text("·")
+                    Text("JuiceLeft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") ·")
                     Link("Licence", destination: URL(string: "https://github.com/Weta-Technologies/JuiceLeft/blob/main/LICENSE")!)
-                        .help("The JuiceLeft licence agreement and privacy policy (JuiceLeft collects nothing).")
+                        .help("The JuiceLeft licence agreement (freeware, all rights reserved).")
+                    Text("·")
+                    Link("Privacy", destination: URL(string: "https://github.com/Weta-Technologies/JuiceLeft/blob/main/PRIVACY.md")!)
+                        .help("The privacy policy: JuiceLeft collects nothing.")
+                    Text("·")
+                    Link("GitHub", destination: URL(string: "https://github.com/Weta-Technologies/JuiceLeft")!)
+                        .help("Source, releases and issues on GitHub.")
                 }
-                Text("© 2026 Weta Technologies Limited · All rights reserved")
+                Text("© 2026 Weta Technologies Limited. All rights reserved.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -121,16 +120,20 @@ struct IntelligenceNudge: View {
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "sparkles").foregroundStyle(Color.accentColor).imageScale(.small).frame(width: 14)
-            Text("Turn on Apple Intelligence for plain-English battery tips").font(.callout).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 6)
-            Button("Not now") { dismiss() }
-                .help("Don't ask again. The Apple Intelligence wording switch appears below once it is on.")
-            Button("Open Settings") { AppleIntelligence.openSettings() }
-                .help("System Settings › Apple Intelligence & Siri. JuiceLeft starts using it as soon as it is on; everything stays on your Mac.")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "sparkles").foregroundStyle(Color.accentColor).imageScale(.small).frame(width: 14)
+                Text("Turn on Apple Intelligence and JuiceLeft phrases its battery line in plain English, on this Mac.").font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Not now") { dismiss() }
+                    .help("Don't ask again. The Apple Intelligence wording switch appears below once it is on.")
+                Button("Open Settings") { AppleIntelligence.openSettings() }
+                    .help("System Settings › Apple Intelligence & Siri. JuiceLeft starts using it as soon as it is on; everything stays on your Mac.")
+            }
+            .controlSize(.small)
         }
-        .controlSize(.small)
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.accentColor.opacity(0.12)))
         .accessibilityElement(children: .contain)
@@ -261,7 +264,7 @@ struct EnergyModeRow: View {
                 .help("The energy mode for the power source in use now — the same setting as System Settings › Battery. Low Power stretches the battery; High Power lets the Mac run flat out on the charger. Changing it needs JuiceLeft's helper, set up once with your password or Touch ID.")
                 if !monitor.helperReady, !monitor.helperUpdating {
                     HStack(spacing: 8) {
-                        Text("Needs JuiceLeft's helper — your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
+                        Text("Your password or Touch ID, once.").font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 6)
                         Button("Set up…") { monitor.setUpHelper() }.controlSize(.small)

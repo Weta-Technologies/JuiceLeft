@@ -2,7 +2,7 @@ import AppKit
 import Security
 import SwiftUI
 
-/// The one administrator prompt — shared by every CyborgFingers app that has a root helper. `Admin.run` asks macOS for
+/// The one administrator prompt — shared by every Weta Technologies app that has a root helper. `Admin.run` asks macOS for
 /// the `system.privilege.admin` right through Authorization Services: the system's own sheet ("<App> wants to make
 /// changes"), which offers Touch ID on Macs that have it, with the password as the fallback. It then runs the app's
 /// installer script as root through AuthorizationExecuteWithPrivileges, bound at run time. That call is deprecated
@@ -54,7 +54,7 @@ enum Admin {
 }
 
 /// When an app update changed the helper files, the installed root helper takes them from the app bundle by itself —
-/// no prompt — as long as the bundle carries a manifest signed with the CyborgFingers publisher key (release builds
+/// no prompt — as long as the bundle carries a manifest signed with the publisher key (release builds
 /// do; see release.sh). The app only writes its bundle path to a request file. The root side copies the files into a
 /// root-owned stage first, verifies the manifest's signature and every file's hash with its own root-owned verifier
 /// and key, refuses downgrades, and only then installs. Anything else is ignored, and the app offers the setup card.
@@ -98,7 +98,7 @@ struct SetupCard: View {
                 Image(systemName: "checkmark.shield.fill").font(.title3).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(updating ? "\(appName)'s helper needs updating" : "Welcome to \(appName)").font(.body.weight(.semibold))
-                    Text("\(what) need a small helper that runs as an administrator. Set it up once — macOS asks for your password, or Touch ID — and nothing will ask again.")
+                    Text("\(what) need a small helper with administrator rights. Set it up once — your password or Touch ID — and nothing asks again.")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
             }
