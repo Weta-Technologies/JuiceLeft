@@ -129,13 +129,19 @@ import AppKit
         return a
     }
 
+    /// The item's width for a frame without drawing it — the notch rule compares the words form with the compact one.
+    static func width(_ f: Frame) -> CGFloat {
+        let glyphX = f.percent.map { round(attributed($0, kernBeforePercent: true).size().width + textGap) } ?? 0
+        return f.trailing.map { ceil(glyphX + glyphWidth + trailingGap + attributed($0).size().width) } ?? glyphX + glyphWidth
+    }
+
     /// The whole item: percent, glyph, time. Template unless red.
     static func draw(_ f: Frame) -> NSImage {
         let percent = f.percent.map { attributed($0, kernBeforePercent: true) }, trailing = f.trailing.map { attributed($0) }
         let percentX: CGFloat = 0
         let glyphX = percent.map { round($0.size().width + textGap) } ?? 0
         let trailingX = glyphX + glyphWidth + trailingGap
-        let width = trailing.map { ceil(trailingX + $0.size().width) } ?? glyphX + glyphWidth
+        let width = width(f)
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             let color = f.red > 0 ? NSColor.systemRed.withAlphaComponent(f.red) : NSColor.black
             let dim: CGFloat = f.armed ? 1 : 0.5

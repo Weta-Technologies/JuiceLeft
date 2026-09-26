@@ -682,13 +682,13 @@ struct ChargingCard: View {
              lit: monitor.s.unplugReminder || monitor.s.fullNotice || monitor.s.plugNotices,
              expanded: $expanded, help: "Notifications about charging.", trailing: { EmptyView() }) {
             Divider()
-            SwitchRow(title: "Remind me to unplug at \(Monitor.unplugAt)%", subtitle: "Lithium batteries age slowest between 20 and 80%",
+            SwitchRow(title: "Remind me to unplug at \(Monitor.unplugAt)%", subtitle: "Batteries age slowest between 20 and 80%",
                       help: "A notification once per charge when the battery reaches \(Monitor.unplugAt)%.", isOn: $monitor.s.unplugReminder)
             SwitchRow(title: "Tell me when it's full", subtitle: ChargeLimit.supported ? "Or held at the charge limit" : nil,
                       help: ChargeLimit.supported ? "A notification when the battery reports fully charged — or, with a charge limit on, when it stops there (“Held at 80%”)."
                                                   : "A notification when the battery reports fully charged.",
                       isOn: $monitor.s.fullNotice)
-            SwitchRow(title: "Charger plugged in or out", subtitle: "Which charger, and the time to flat when unplugged",
+            SwitchRow(title: "Charger plugged in or out", subtitle: "Which charger, or the time to flat",
                       help: "A notification on every plug and unplug.", isOn: $monitor.s.plugNotices)
             if monitor.light.available { LightRows(monitor: monitor, light: monitor.light) }
         }
@@ -696,65 +696,91 @@ struct ChargingCard: View {
 }
 
 /// The menu-bar display and the wording.
+/// The menu-bar style, with the item as it reads right now in the chosen style. Everything rarer lives under More.
 struct GeneralRows: View {
     @ObservedObject var monitor: Monitor
 
-    private var menuBarExample: String {
-        switch monitor.s.menuBar {
-        case .icon: return "the battery alone"
-        case .percent: return "84% and the battery, Apple's look"
-        case .compact: return "84% · battery · 2:10"
-        case .words: return "84% · battery · 2 Hours 10 Min Remaining"
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Menu bar shows").font(.callout)
+                Text(monitor.menuPreview(for: monitor.s.menuBar)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .accessibilityLabel("Right now: \(monitor.menuPreview(for: monitor.s.menuBar))")
+            }
+            Picker("Menu bar shows", selection: $monitor.s.menuBar) {
+                Text("Icon").tag(Settings.MenuBar.icon)
+                Text("Percent").tag(Settings.MenuBar.percent)
+                Text("Compact").tag(Settings.MenuBar.compact)
+                Text("Words").tag(Settings.MenuBar.words)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
         }
+    }
+}
+
+/// The rarer settings, folded into one row: the power draw, the keyboard shortcut, Apple's battery icon, the
+/// wording, and the juiceleft:// links. Collapsed by default; remembered like the cards.
+struct MoreRows: View {
+    @ObservedObject var monitor: Monitor
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("moreExpanded") private var expanded = false
+
+    init(monitor: Monitor) {
+        self.monitor = monitor
+        _expanded = AppStorage(wrappedValue: false, "moreExpanded", store: monitor.defaults)
+    }
+
+    private var summary: String {
+        var parts: [String] = []
+        if let key = monitor.s.hotKey { parts.append("Shortcut \(key.label)") }
+        if monitor.s.menuBarWatts, monitor.s.menuBar != .icon { parts.append("Power draw") }
+        if !monitor.s.replaceSystemIcon { parts.append("Apple's icon kept") }
+        return parts.isEmpty ? "Shortcut, power draw, scripting" : parts.joined(separator: " · ")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text("Menu bar shows").font(.callout)
-                    Text(menuBarExample).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 10) {
+            DisclosureRow(title: "More", summary: summary, symbol: "ellipsis.circle",
+                          help: "The keyboard shortcut, the power draw in the menu bar, Apple's battery icon, the wording, and the juiceleft:// links for your own shortcuts and scripts.",
+                          expanded: $expanded)
+            if expanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    if monitor.s.menuBar != .icon {
+                        SwitchRow(title: "Power draw in the menu bar", subtitle: "“−12 W” on battery, “+45 W” charging",
+                                  help: "Adds what is flowing out of (or into) the battery after the time. Off keeps Apple's look exactly.",
+                                  isOn: $monitor.s.menuBarWatts)
+                    }
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Keyboard shortcut").font(.callout)
+                            Text(monitor.s.hotKey.map { "\($0.label), from any app" } ?? "Opens the panel from any app")
+                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 6)
+                        ShortcutRecorder(spec: Binding(get: { monitor.s.hotKey }, set: { monitor.setHotKey($0) })).fixedSize()
+                            .help("Click, then press the keys: ⌘, ⌥ or ⌃ with a key, or a function key. Press it again anywhere to close the panel. Esc keeps what was there; Delete removes it. No permission needed.")
+                    }
+                    SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's comes back when JuiceLeft quits",
+                              help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
+                              isOn: $monitor.s.replaceSystemIcon)
+                    if monitor.aiStatus == .available {
+                        SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line, on this Mac",
+                                  help: "Uses the on-device model to word the summary; the numbers are always JuiceLeft's. Nothing leaves the Mac.", isOn: $monitor.s.insight)
+                    }
+                    HStack(spacing: 6) {
+                        Text("juiceleft:// links for your shortcuts and scripts").font(.caption).foregroundStyle(.secondary)
+                            .help("Open one of these from a shortcut of your own, a script or the command line:\njuiceleft://savebattery?on=1 (on=0 undoes)\njuiceleft://mode?set=low | automatic | high\njuiceleft://topup (charge to full once)\njuiceleft://monitoring?on=0\njuiceleft://snooze\nNothing else is accepted.")
+                        Spacer(minLength: 0)
+                        Button("Reinstall helper…") { monitor.setUpHelper() }
+                            .buttonStyle(.link).font(.caption)
+                            .help("If energy modes or the charging light ever stop working: reinstalls JuiceLeft's helper (one administrator prompt).")
+                    }
                 }
-                Picker("Menu bar shows", selection: $monitor.s.menuBar) {
-                    Text("Icon").tag(Settings.MenuBar.icon)
-                    Text("Percent").tag(Settings.MenuBar.percent)
-                    Text("Compact").tag(Settings.MenuBar.compact)
-                    Text("Words").tag(Settings.MenuBar.words)
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
-            }
-            if monitor.s.menuBar != .icon {
-                SwitchRow(title: "Show the power draw too", subtitle: "“−12 W” on battery, “+45 W” charging",
-                          help: "Adds what is flowing out of (or into) the battery to the menu-bar item. Off keeps Apple's look exactly.",
-                          isOn: $monitor.s.menuBarWatts)
-            }
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Keyboard shortcut").font(.callout)
-                    Text(monitor.s.hotKey.map { "\($0.label), from any app" } ?? "Opens the panel from any app")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 6)
-                ShortcutRecorder(spec: Binding(get: { monitor.s.hotKey }, set: { monitor.setHotKey($0) })).fixedSize()
-                    .help("Click, then press the keys: ⌘, ⌥ or ⌃ with a key, or a function key. Press it again anywhere to close the panel. Esc keeps what was there; Delete removes it. No permission needed.")
-            }
-            SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
-                      help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
-                      isOn: $monitor.s.replaceSystemIcon)
-            if monitor.aiStatus == .available {
-                SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line on this Mac; the numbers are always JuiceLeft's",
-                          help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)
-            }
-            HStack(spacing: 6) {
-                Text("Your shortcuts and scripts: juiceleft:// links.").font(.caption).foregroundStyle(.secondary)
-                    .help("Open one of these from a shortcut of your own, a script or the command line:\njuiceleft://savebattery?on=1 (on=0 undoes)\njuiceleft://mode?set=low | automatic | high\njuiceleft://topup (charge to full once)\njuiceleft://monitoring?on=0\njuiceleft://snooze\nNothing else is accepted.")
-                Spacer(minLength: 0)
-                Button("Reinstall helper…") { monitor.setUpHelper() }
-                    .buttonStyle(.link).font(.caption)
-                    .help("If energy modes or the charging light ever stop working: reinstalls JuiceLeft's helper (one administrator prompt).")
+                .transition(.opacity)
             }
         }
+        .animation(reduceMotion ? nil : panelEase, value: expanded)
     }
 }
 
@@ -784,7 +810,7 @@ struct LightRows: View {
                 .help("Blink, then steady: a slow orange blink for ten seconds after plugging in, then steady orange. Blink: the slow blink the whole time. Apple's default: orange as macOS does it.")
                 Spacer()
             }
-            SwitchRow(title: "Green when full or at the charge limit", subtitle: "macOS leaves it orange at a limit; this fixes that",
+            SwitchRow(title: "Green when full or at the charge limit", subtitle: "macOS leaves it orange at a limit",
                       help: "Whenever the charger is in and the battery isn't taking charge.", isOn: $monitor.s.lightGreenAtLimit)
             SwitchRow(title: "Fast blink when charging from \(monitor.s.alertAt)% or below",
                       help: "A fast orange blink until the battery is above the tone level, then the pattern above.", isOn: $monitor.s.lightFastWhenLow)

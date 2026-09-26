@@ -195,6 +195,7 @@ struct History: Codable, Equatable {
     private var powerTimer: Timer?
     private var steady = Steady()                               // the menu bar's spelled-out minutes
     private(set) var squeezed = false                           // macOS had no room for the item: fall back to the compact form
+    private(set) var itemWidths: (words: CGFloat, compact: CGFloat) = (0, 0)   // the item right now in each form, for the notch rule
     let hardware: Hardware
     private var careWindow: (start: Date, level: Double, brightnessSum: Double, samples: Int, lowPower: Int)?
     private var smartPrevious: PowerMode.Mode?
@@ -718,6 +719,11 @@ struct History: Codable, Equatable {
         let parts = Self.menuParts(squeezed && s.menuBar == .words ? .compact : s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full,
                                    charging: r.charging, minutes: minutes, wattsText: wattsText)
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
+        let width = { (style: Settings.MenuBar) -> CGFloat in   // the item in each form, for the notch rule
+            let p = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: minutes, wattsText: wattsText)
+            return MenuIcon.width(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: self.s.armed, percent: p.percent, trailing: p.trailing))
+        }
+        itemWidths = (width(.words), width(.compact))
         care(r)
         light.update(enabled: s.light, onAC: r.onAC, charging: r.charging && !r.full, percent: r.percent, alertAt: s.alertAt,
                      behaviour: s.lightBehaviour, greenAtLimit: s.lightGreenAtLimit, fastWhenLow: s.lightFastWhenLow, now: r.at)
@@ -855,6 +861,15 @@ struct History: Codable, Equatable {
         }
         if let wattsText { trailing = [trailing, wattsText].compactMap { $0 }.joined(separator: " · ") }
         return (pct, trailing)
+    }
+
+    /// The "Menu bar shows" line: the item as it reads right now in a style — "71% · battery · 45 Min Until Full".
+    func menuPreview(for style: Settings.MenuBar) -> String {
+        guard style != .icon else { return "the battery alone" }
+        guard let r = reading else { return "the battery" }
+        let wattsText = s.menuBarWatts ? r.batteryWatts.flatMap { abs($0) >= 0.5 ? Format.signedWatts($0) : nil } : nil
+        let parts = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: steady.shown ?? forecast?.minutes, wattsText: wattsText)
+        return [parts.percent, "battery", parts.trailing].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// What VoiceOver reads for the menu-bar item: the whole story.

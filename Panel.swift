@@ -76,6 +76,7 @@ struct Panel: View {
             StretchCard(monitor: monitor)
             ChargingCard(monitor: monitor)
             GeneralRows(monitor: monitor)
+            MoreRows(monitor: monitor)
             Divider()
             HStack {
                 Toggle("Launch at login", isOn: Binding(get: { LoginItem.isOn }, set: { monitor.setLoginItem($0) }))
@@ -517,6 +518,51 @@ struct IconTile: View {
 }
 
 /// Title (+ optional subtitle) on the left, a small switch pinned to the right edge.
+/// A collapsible section's header: chevron, title, a one-line summary of what is inside (accent-coloured while
+/// the section is doing something right now), and room for something on the right.
+struct DisclosureRow<Trailing: View>: View {
+    let title: String
+    let summary: String
+    var symbol: String?
+    var live = false
+    let help: String
+    @Binding var expanded: Bool
+    @ViewBuilder var trailing: Trailing
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : panelEase) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+                    .frame(width: 12)
+                if let symbol { Image(systemName: symbol).foregroundStyle(live ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)).frame(width: 16) }
+                Text(title).font(.callout.weight(.medium))
+                Text(summary).font(.caption).foregroundStyle(live ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                    .lineLimit(1).truncationMode(.tail)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : panelEase, value: summary)
+                Spacer(minLength: 8)
+                trailing
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel("\(title): \(summary)")
+        .accessibilityValue(expanded ? "expanded" : "collapsed")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+extension DisclosureRow where Trailing == EmptyView {
+    init(title: String, summary: String, symbol: String? = nil, live: Bool = false, help: String, expanded: Binding<Bool>) {
+        self.init(title: title, summary: summary, symbol: symbol, live: live, help: help, expanded: expanded) { EmptyView() }
+    }
+}
+
 struct SwitchRow: View {
     let title: String
     var subtitle: String?

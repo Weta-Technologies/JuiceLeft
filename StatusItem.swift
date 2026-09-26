@@ -52,13 +52,20 @@ import SwiftUI
         monitor.icon.$image.sink { [weak self] image in
             MainActor.assumeIsolated {
                 button.image = image
-                self?.checkRoom()
+                self?.scheduleRoomCheck()
             }
         }.store(in: &sinks)
         // ponytail: best effort — when the menu bar runs out of room macOS drops the item off screen; the compact form
         // is tried then, and the full one again every few minutes. Untested for want of a crowded enough bar.
         NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] note in
-            MainActor.assumeIsolated { if (note.object as? NSWindow) === self?.item.button?.window { self?.checkRoom() } }
+            MainActor.assumeIsolated { if (note.object as? NSWindow) === self?.item.button?.window { self?.scheduleRoomCheck() } }
+        }
+        // Neighbours come and go with apps, and the notch with the screen: the room check runs again then, debounced.
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.scheduleRoomCheck() } }
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleRoomCheck() }
         }
         monitor.objectWillChange.receive(on: DispatchQueue.main)
             .sink { [weak self] in MainActor.assumeIsolated { self?.refreshText() } }.store(in: &sinks)
@@ -84,18 +91,75 @@ import SwiftUI
         refreshText()
     }
 
+    // MARK: Room in the menu bar
+
     private var roomRetry: Timer?
+    private var roomDebounce: Timer?
+    nonisolated static let notchMargin: CGFloat = 8
+
+    /// The notch rule, pure for --selftest. `items` are every status item's frame on the menu-bar screen (ours too),
+    /// `notch` the gap between that screen's top-left and top-right areas, the widths ours in each form. Squeeze the
+    /// moment any item sits in the gap (macOS hides it there); go back to the words only once the leftmost item, moved
+    /// left by the width the words add, would still clear the gap by a margin. The two can never both hold for one
+    /// layout, so nothing flaps. nil = leave it as it is.
+    nonisolated static func notchDecision(squeezed: Bool, items: [CGRect], notch: CGRect, wordsWidth: CGFloat, compactWidth: CGFloat,
+                                          margin: CGFloat = notchMargin) -> Bool? {
+        let hidden = items.contains { $0.maxX > notch.minX && $0.minX < notch.maxX }
+        if !squeezed { return hidden ? true : nil }
+        if hidden { return nil }
+        guard let leftmost = items.map(\.minX).min() else { return false }
+        return leftmost - max(wordsWidth - compactWidth, 0) >= notch.maxX + margin ? false : nil
+    }
+
+    /// The camera notch on a screen, in that screen's coordinates; nil where there is none.
+    nonisolated static func notch(of screen: NSScreen) -> CGRect? {
+        guard let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea, right.minX > left.maxX else { return nil }
+        return CGRect(x: left.maxX, y: left.minY, width: right.minX - left.maxX, height: left.height)
+    }
+
+    /// Every status item's frame in the menu bar of `screen` (the first screen, where the menu bar is), ours included:
+    /// window bounds and level only — no names, no permission. CG's top-left origin flipped into the screen's own.
+    private static func statusItemFrames(on screen: NSScreen) -> [CGRect] {
+        guard let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] else { return [] }
+        let level = Int(CGWindowLevelForKey(.statusWindow)), band = screen.frame.maxY - 40
+        return list.compactMap { info in
+            guard (info[kCGWindowLayer as String] as? Int) == level, let dict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let b = CGRect(dictionaryRepresentation: dict), b.width > 0, b.height > 0, b.height < 60 else { return nil }
+            let rect = CGRect(x: b.minX, y: screen.frame.height - b.maxY, width: b.width, height: b.height)
+            return rect.maxY > band && screen.frame.intersects(rect) ? rect : nil
+        }
+    }
+
+    private func scheduleRoomCheck() {
+        roomDebounce?.invalidate()
+        let t = Timer(timeInterval: 1.5, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.checkRoom() } }
+        RunLoop.main.add(t, forMode: .common)
+        roomDebounce = t
+    }
 
     /// Pushed off the screen (or given no width) = squeezed out; the compact form goes up in its place. Occlusion is
-    /// deliberately not a signal: a menu-bar organiser's overlay covers the item without hiding it.
+    /// deliberately not a signal: a menu-bar organiser's overlay covers the item without hiding it. On a screen with a
+    /// camera notch the notch rule decides both ways — a neighbour hidden in the gap squeezes the words, and they come
+    /// back only when they would fit; elsewhere the full form is tried again every few minutes.
     private func checkRoom() {
-        guard let window = item.button?.window, let screen = NSScreen.main else { return }
+        guard let window = item.button?.window, let screen = NSScreen.main, let bar = NSScreen.screens.first else { return }
         let onScreen = screen.frame.intersects(window.frame) && window.frame.width > 1
-        if !onScreen, !monitor.squeezed {
+        let notch = Self.notch(of: bar)
+        if !onScreen {
+            guard !monitor.squeezed else { return }
             monitor.setSqueezed(true)
-            let retry = Timer(timeInterval: 5 * 60, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.monitor.setSqueezed(false) } }
-            RunLoop.main.add(retry, forMode: .common)
-            roomRetry = retry
+            if notch == nil {
+                let retry = Timer(timeInterval: 5 * 60, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.monitor.setSqueezed(false) } }
+                RunLoop.main.add(retry, forMode: .common)
+                roomRetry = retry
+            }
+            return
+        }
+        guard let notch, monitor.interactive, monitor.s.menuBar == .words else { return }
+        let widths = monitor.itemWidths
+        if let decision = Self.notchDecision(squeezed: monitor.squeezed, items: Self.statusItemFrames(on: bar), notch: notch,
+                                             wordsWidth: widths.words, compactWidth: widths.compact) {
+            monitor.setSqueezed(decision)
         }
     }
 

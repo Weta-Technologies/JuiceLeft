@@ -40,13 +40,14 @@ import SwiftUI
             ("history", make(84, false, flat, .clear, [], shortcut), ["historyExpanded", "devicesExpanded"], 24),
             ("history-12h", make(84, false, flat, .clear, [], shortcut), ["historyExpanded"], 12),
             ("history-3d", make(84, false, flat, .clear, [], shortcut), ["historyExpanded"], 72),
+            ("more", make(84, false, flat, .clear, [], shortcut), ["moreExpanded"], 24),
             ("update", make(84, false, flat, .clear, [dim], Settings()), ["healthExpanded"], 24),   // last: the sample update card stays offered
         ]
         for state in states {
             if state.name == "update" { Updater.shared.offerSample() }
             defaults.set(state.name != "setup", forKey: "tapHintSeen")
             defaults.set(state.hours, forKey: "historyHours")
-            for key in ["alertsExpanded", "healthExpanded", "stretchExpanded", "chargingExpanded", "historyExpanded", "devicesExpanded"] { defaults.set(state.expanded.contains(key), forKey: key) }
+            for key in ["alertsExpanded", "healthExpanded", "stretchExpanded", "chargingExpanded", "historyExpanded", "devicesExpanded", "moreExpanded"] { defaults.set(state.expanded.contains(key), forKey: key) }
             for dark in [false, true] {
                 write(Panel(monitor: state.monitor).content.frame(width: 344), as: "\(state.name)-\(dark ? "dark" : "light")", dark: dark, to: out)
                 if ["battery", "warning"].contains(state.name) { write(HoverCardView(monitor: state.monitor), as: "hover-\(state.name)-\(dark ? "dark" : "light")", dark: dark, to: out) }

@@ -467,6 +467,17 @@ import SwiftUI
     check(Settings.load(d13).hotKey == nil, "a shortcut that would steal typing is dropped")
     d13.removePersistentDomain(forName: suite13)
 
+    // The notch rule: squeeze the moment a neighbour sits in the camera gap; the words come back only when they would still clear it.
+    let notch = CGRect(x: 663, y: 0, width: 185, height: 37), me = CGRect(x: 1300, y: 0, width: 200, height: 37)
+    let item = { (x: CGFloat) in CGRect(x: x, y: 0, width: 36, height: 37) }
+    let decide = { (squeezed: Bool, items: [CGRect]) in StatusItemController.notchDecision(squeezed: squeezed, items: items, notch: notch, wordsWidth: 200, compactWidth: 80) }
+    check(decide(false, [me, item(766)]) == true, "a neighbour under the notch: squeeze")
+    check(decide(false, [me, item(900)]) == nil && decide(false, [me]) == nil, "everyone clear: the words stay")
+    check(decide(true, [me, item(900)]) == nil, "900 − 120 < 848 + 8: stay compact")
+    check(decide(true, [me, item(980)]) == false, "980 − 120 ≥ 856: the words fit again")
+    check(decide(false, [me, item(860)]) == nil, "and after that expansion nothing is under the notch: no flap")
+    check(decide(true, [me, item(766)]) == nil && decide(true, []) == false, "still hidden: stay compact; an empty bar: expand")
+
     Updater.selfTest()   // versions, the release feed, signatures, the swap script on a fake bundle
 
     let r = reading!
