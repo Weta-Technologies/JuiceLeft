@@ -507,19 +507,21 @@ import SwiftUI
     check(decide(true, [me, item(980)]) == false, "980 − 120 ≥ 856: the words fit again")
     check(decide(false, [me, item(860)]) == nil, "and after that expansion nothing is under the notch: no flap")
     check(decide(true, [me, item(766)]) == nil && decide(true, []) == false, "still hidden: stay compact; an empty bar: expand")
-    check(StatusItemController.notchDecision(squeezed: false, items: [item(900)], parked: true, notch: notch, wordsWidth: 200, compactWidth: 80) == true
-          && StatusItemController.notchDecision(squeezed: true, items: [item(980)], parked: true, notch: notch, wordsWidth: 200, compactWidth: 80) == nil,
-          "an item parked off every screen is hidden too: squeeze, and stay")
 
     // Which windows are menu-bar items: the live layout of a 1512 × 982 screen with a 33 pt bar (CG bounds, top-left origin).
     let frame = { (x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat, n: Int) in
-        StatusItemController.itemFrame(bounds: CGRect(x: x, y: y, width: w, height: h), layer: 25, number: n, own: 7, screenHeight: 982, barHeight: 33) }
+        StatusItemController.itemFrame(bounds: CGRect(x: x, y: y, width: w, height: h), layer: 25, number: n, own: 7,
+                                       screen: CGRect(x: 0, y: 0, width: 1512, height: 982), barHeight: 33) }
     check(frame(755, 27, 370, 548, 1) == nil && frame(1133, 28, 370, 836, 2) == nil, "hidden panels at the status level start lower and stand taller: not items")
     check(frame(0, 982, 0, 0, 3) == nil, "a zero-size window is nothing")
     check(frame(766, 0, 36, 33, 4) == CGRect(x: 766, y: 949, width: 36, height: 33) && frame(902, 0, 34, 33, 5) != nil, "item windows at the top, bar-high: counted")
     check(frame(1322, 0, 42, 33, 7) == nil && frame(1322, 0, 42, 33, 8) != nil, "our own item, by window number, is left out")
-    let layout = [frame(755, 27, 370, 548, 1), frame(1133, 28, 370, 836, 2), frame(0, 982, 0, 0, 3), frame(902, 0, 34, 33, 5), frame(936, 0, 34, 33, 6)].compactMap { $0 }
-    check(StatusItemController.notchDecision(squeezed: false, items: layout, notch: notch, wordsWidth: 200, compactWidth: 80) == nil, "that layout, nothing in the gap: the words stay")
+    let parkedX: [CGFloat] = [-9502, -9470, -9432, -9386, -9346, -9308, -9261, -9223, -4207, -4175, -4137, -4099]   // hidden on purpose, always there
+    let parked = parkedX.enumerated().map { frame($1, 0, $0 < 8 ? 5016 : 5001, 33, 100 + $0) }
+    check(parked.allSatisfy { $0 == nil }, "items parked far off screen say nothing about room: not counted")
+    let layout = ([frame(755, 27, 370, 548, 1), frame(1133, 28, 370, 836, 2), frame(0, 982, 0, 0, 3), frame(902, 0, 34, 33, 5), frame(936, 0, 34, 33, 6)] + parked).compactMap { $0 }
+    check(layout.count == 2 && StatusItemController.notchDecision(squeezed: false, items: layout, notch: notch, wordsWidth: 200, compactWidth: 80) == nil,
+          "that layout, twelve parked items and all, nothing in the gap: the words stay")
     check(StatusItemController.notchDecision(squeezed: false, items: layout + [frame(766, 0, 36, 33, 4)!], notch: notch, wordsWidth: 200, compactWidth: 80) == true, "an item window at 766: squeeze")
 
     // The keyboard backlight: a level captured while macOS had it suppressed (0, auto on) never writes that 0 back.
