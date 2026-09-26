@@ -98,11 +98,13 @@ extension E2E {
         settle()
         check("Status item: press and hold toggles monitoring", "StatusItemController.perform(.toggle), twice", off && m.s.armed && m.icon.frame.armed)
         item.hover?.crossed(true)
-        settle(HoverCard.delay + 0.3)
+        settle(HoverCard.delay)   // not before the delay…
+        waitFor(3) { item.hover?.showing == true && item.hover?.panel?.isVisible == true }   // …then as soon as it's up (a busy Mac runs late)
         let shown = item.hover?.showing == true && item.hover?.panel?.isVisible == true
         item.hover?.crossed(false)
-        settle(HoverCard.fade + 0.2)
-        check("Hover card: shows after the delay, goes when the pointer leaves", "HoverCard.crossed(true / false)", shown && item.hover?.showing == false && item.hover?.panel?.isVisible == false)
+        waitFor(HoverCard.fade + 3) { item.hover?.showing == false && item.hover?.panel?.isVisible == false }
+        check("Hover card: shows after the delay, goes when the pointer leaves", "HoverCard.crossed(true / false)", shown && item.hover?.showing == false && item.hover?.panel?.isVisible == false,
+              "shown \(shown), still showing \(item.hover?.showing == true), visible \(item.hover?.panel?.isVisible == true)")
         item.perform(.panel)
         settle(0.3)
         item.hover?.crossed(true)

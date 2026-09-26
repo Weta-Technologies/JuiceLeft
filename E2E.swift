@@ -19,8 +19,12 @@ import SwiftUI
     static var out = URL(fileURLWithPath: "/tmp")
 
     /// One row: `ok` decides pass/fail; `why` is the detail on a failure.
+    private static var checks = 0
     static func check(_ function: String, _ how: String, _ ok: Bool, _ why: @autoclosure () -> String = "") {
-        render()
+        checks += 1
+        // Laid out after every check (every body runs); drawn now and then and on a failure. Drawing the whole panel
+        // after every check made one run take about 45 minutes at full CPU.
+        render(draw: !ok || checks % 12 == 0)
         rows.append(Row(function: function, how: how, result: ok ? "pass" : "FAIL: \(why())"))
         print("\(ok ? "pass" : "FAIL")  \(function)\(ok ? "" : " — \(why())")"); fflush(stdout)
     }
@@ -180,11 +184,12 @@ import SwiftUI
     static var window: NSWindow?
 
     /// Lays the whole panel out and draws it — every card expanded — so each state is rendered, not just computed.
-    static func render(_ name: String? = nil) {
+    static func render(_ name: String? = nil, draw: Bool = true) {
         guard let host, let window else { return }
         if name != nil { settle(0.4) }   // a picture to look at: let the panel's transitions finish first
         host.layoutSubtreeIfNeeded()
         window.setContentSize(host.fittingSize)
+        guard draw || name != nil else { return }
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
         NSGraphicsContext.saveGraphicsState()   // on the window's background, as the popover shows it
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
