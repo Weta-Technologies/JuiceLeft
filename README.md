@@ -234,7 +234,7 @@ build/JuiceLeft.app/Contents/MacOS/JuiceLeft --simulate            # a fake batt
 build/JuiceLeft.app/Contents/MacOS/JuiceLeft --simulate hold       # parks it at 15 %, flashing, for CPU measurements
 ```
 
-lets you watch the warning flash at 20 %, the tone at 10 %, the charger-connected reset and the heat guard (the fake pack warms past 35 °C on the charger) without draining anything, printing what happens; it uses its own settings domain and history file, a fake screen and keyboard, and never installs the helper or touches Apple's battery icon. Add `--volume 0.2` to keep the tone quiet.
+lets you watch the warning flash at 20 %, the tone at 10 %, the charger-connected reset and the heat guard (the fake pack warms past 35 °C on the charger) without draining anything, printing what happens; it uses its own settings domain and history file, a fake screen and keyboard, a stand-in helper, charge limit and battery item, and never installs or asks the real helper, or touches Apple's battery icon. Add `--volume 0.2` to keep the tone quiet.
 
 ```bash
 ./test-helper.sh

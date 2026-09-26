@@ -4,6 +4,9 @@ import SwiftUI
 // using the most power, battery health and charging care, and the general rows. Every control maps 1:1 onto
 // `Settings` or a Monitor action; the layout only adds progressive disclosure.
 
+/// Opens a settings pane (or, failing that, the settings themselves); --e2e records what would have opened.
+enum Opener { static var open: (URL) -> Bool = { NSWorkspace.shared.open($0) } }
+
 /// One curve for every panel transition; callers pass nil (no animation) under Reduce Motion.
 let panelEase = Animation.easeInOut(duration: 0.25)
 

@@ -95,9 +95,8 @@ enum Alerts {
 enum Notifier {
     private static var usable: Bool { Bundle.main.bundleIdentifier != nil && Bundle.main.bundleURL.pathExtension == "app" }
 
-    /// Asks once, then reports whether notifications are allowed (nil = unknown / not usable).
-    static func setUp(_ report: @escaping (Bool?) -> Void) {
-        guard usable else { return report(nil) }
+    /// The notification centre, behind two closures: --e2e records what would be asked and posted, and asks nothing.
+    static var authorize: (@escaping (Bool?) -> Void) -> Void = { report in
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in
             center.getNotificationSettings { settings in
@@ -106,14 +105,23 @@ enum Notifier {
             }
         }
     }
-
-    static func post(id: String, title: String, body: String) {
-        guard usable else { return }
+    static var deliver: (_ id: String, _ title: String, _ body: String) -> Void = { id, title, body in
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
             if let error { NSLog("JuiceLeft: notification failed: \(error.localizedDescription)") }
         }
+    }
+
+    /// Asks once, then reports whether notifications are allowed (nil = unknown / not usable).
+    static func setUp(_ report: @escaping (Bool?) -> Void) {
+        guard usable else { return report(nil) }
+        authorize(report)
+    }
+
+    static func post(id: String, title: String, body: String) {
+        guard usable else { return }
+        deliver(id, title, body)
     }
 }

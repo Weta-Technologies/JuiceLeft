@@ -135,10 +135,20 @@ final class Lid {
 /// Holds the light at what the rules ask for, writing a request only when that changes (and once more, two
 /// seconds after the lid opens, since SleepLess hands the light back on its own way out).
 @MainActor final class LightController: ObservableObject {
-    @Published private(set) var onMagSafe = MagSafePort.active
+    /// The port, the helper and the request file, as closures: FakeMac stands in for them and the real light is never touched.
+    static var portExists: () -> Bool = { MagSafePort.exists }
+    static var portActive: () -> Bool = { MagSafePort.active }
+    static var isReady: () -> Bool = {
+        PowerMode.helperReady && FileManager.default.contentsEqual(atPath: toolPath, andPath: bundledTool) && FileManager.default.isWritableFile(atPath: requestPath)
+    }
+    static var send: (String) throws -> Void = { line in
+        try (line + "\n").write(toFile: requestPath, atomically: false, encoding: .utf8)   // rewritten in place: the folder is root's
+    }
+
+    @Published private(set) var onMagSafe = LightController.portActive()
     @Published private(set) var holding: MagSafeLight.Colour?      // what we last asked for; nil = macOS has it
     @Published private(set) var needsSetup = false                  // the helper isn't installed or isn't this version
-    let available = MagSafePort.exists
+    let available = LightController.portExists()
     var refresh: (() -> Void)?                                      // the monitor re-evaluates (timers, lid)
     var log: ((String) -> Void)?
     private let lid = Lid()
@@ -152,10 +162,7 @@ final class Lid {
     static var bundledTool: String { Bundle.main.path(forResource: "juiceleft-led", ofType: nil) ?? "" }
 
     /// The tool is installed, is this build's, and the request file is ours to write (the script is checked by PowerMode).
-    static var ready: Bool {
-        PowerMode.helperReady && FileManager.default.contentsEqual(atPath: toolPath, andPath: bundledTool)
-            && FileManager.default.isWritableFile(atPath: requestPath)
-    }
+    static var ready: Bool { isReady() }
 
     var lidClosed: Bool { lid.closed }
 
@@ -177,7 +184,7 @@ final class Lid {
 
     /// The charger went in or out.
     func plugChanged(onAC: Bool, at now: Date) {
-        onMagSafe = onAC && MagSafePort.active
+        onMagSafe = onAC && Self.portActive()
         pluggedAt = onAC ? now : nil
         blinkTimer?.invalidate()
         guard onAC else { return }
@@ -190,7 +197,7 @@ final class Lid {
     func update(enabled: Bool, onAC: Bool, charging: Bool, percent: Int, alertAt: Int, behaviour: MagSafeLight.Behaviour,
                 greenAtLimit: Bool, fastWhenLow: Bool, now: Date) {
         guard available else { return }
-        if pluggedAt == nil, onAC { pluggedAt = now.addingTimeInterval(-MagSafeLight.blinkFor); onMagSafe = MagSafePort.active }   // already plugged in at launch: no blink
+        if pluggedAt == nil, onAC { pluggedAt = now.addingTimeInterval(-MagSafeLight.blinkFor); onMagSafe = Self.portActive() }   // already plugged in at launch: no blink
         let inputs = MagSafeLight.Inputs(enabled: enabled, onMagSafe: onMagSafe, charging: charging, percent: percent, alertAt: alertAt,
                                          secondsSincePlug: pluggedAt.map { now.timeIntervalSince($0) } ?? 0, lidClosed: lid.closed,
                                          behaviour: behaviour, greenAtLimit: greenAtLimit, fastWhenLow: fastWhenLow)
@@ -215,7 +222,7 @@ final class Lid {
             return
         }
         do {
-            try (line + "\n").write(toFile: Self.requestPath, atomically: false, encoding: .utf8)   // rewritten in place: the folder is root's
+            try Self.send(line)
             self.holding = holding
             needsSetup = false
             log?("light → \(line)")

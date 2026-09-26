@@ -26,6 +26,7 @@ import SwiftUI
         if Updater.shared.testRun { return Updater.shared.start() }   // --update-test: only the updater, on a copy of the app
         let args = CommandLine.arguments
         let simulate = args.contains("--simulate")
+        if simulate { FakeMac().install() }   // the helper, the charge limit and the battery item are stand-ins: nothing real changes
         let source: BatterySource = simulate ? Simulator(hold: args.contains("hold")) : LiveBattery()
         let defaults = simulate ? UserDefaults(suiteName: "io.github.cyborgfingers.juiceleft.simulate")! : .standard
         let historyURL = simulate ? FileManager.default.temporaryDirectory.appendingPathComponent("juiceleft-simulate-history.json") : History.url
@@ -333,6 +334,9 @@ import SwiftUI
     careDefaults.removePersistentDomain(forName: careSuite)
     careDefaults.set(#"{"replaceSystemIcon":false,"smartLowPower":false}"#.data(using: .utf8), forKey: Settings.key)
     let fake = FakeHardware()
+    let mac = FakeMac()   // and a fake helper, limit and battery item: the real energy mode is never asked for
+    mac.install()
+    Notifier.deliver = { _, _, _ in }   // the heat nudge below posts nothing real
     final class Still: BatterySource { var onReading: ((Reading?) -> Void)?; let interval: TimeInterval = 30; func start() {}; func refresh() {} }
     let careURL = FileManager.default.temporaryDirectory.appendingPathComponent("juiceleft-selftest-care.json")
     let monitor = Monitor(source: Still(), defaults: careDefaults, historyURL: careURL, hardware: fake)
@@ -343,9 +347,11 @@ import SwiftUI
     check(monitor.forecast?.kind == .flat && (monitor.saveBatteryGain?.minutes ?? 0) > 0, "Save Battery shows a gain before the click: \(String(describing: monitor.saveBatteryGain))")
     monitor.saveBattery()
     check(monitor.saving != nil && fake.level == 0.4 && fake.keys == .init(brightness: 0, auto: false), "Save Battery dimmed to 40 % and turned the keyboard light off: \(fake.log)")
+    check(mac.powerRequests == ["b 1"], "Save Battery asked the (fake) helper for Low Power on battery: \(mac.powerRequests)")
     check(monitor.saveBatteryGain == nil, "no gain offered while saving")
     monitor.undoSaveBattery()
     check(monitor.saving == nil && fake.level == 0.85 && fake.keys == .init(brightness: 0.5, auto: true), "Undo put brightness and keyboard back: \(fake.log)")
+    check(mac.powerRequests == ["b 1", "b 0"], "Undo put the energy mode back: \(mac.powerRequests)")
     monitor.saveBattery()
     careReading.at = at(5); careReading.onAC = true; careReading.charging = true
     monitor.ingest(careReading)

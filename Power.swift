@@ -11,10 +11,24 @@ enum SystemBattery {
     static let hidden = 24           // Control Center's "don't show in the menu bar"
     static let originalKey = "systemBatteryOriginal"   // in JuiceLeft's defaults: the value before the first hide
 
-    /// Control Center's current value: nil = never set (shown).
-    static var current: Int? {
-        (CFPreferencesCopyValue(key, domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost) as? NSNumber)?.intValue
+    /// The battery item's preferences, behind two closures: FakeMac swaps in a dictionary and never touches the real ones.
+    /// The Battery visibility is a per-host value; the item's position is a plain app value.
+    static var read: (_ key: String, _ perHost: Bool) -> Any? = { key, perHost in
+        perHost ? CFPreferencesCopyValue(key as CFString, domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
+                : CFPreferencesCopyAppValue(key as CFString, domain)
     }
+    static var write: (_ key: String, _ value: Any?, _ perHost: Bool) -> Void = { key, value, perHost in
+        if perHost {
+            CFPreferencesSetValue(key as CFString, value.map { $0 as AnyObject }, domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
+            CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
+        } else {
+            CFPreferencesSetAppValue(key as CFString, value.map { $0 as AnyObject }, domain)
+            CFPreferencesAppSynchronize(domain)
+        }
+    }
+
+    /// Control Center's current value: nil = never set (shown).
+    static var current: Int? { (read(key as String, true) as? NSNumber)?.intValue }
 
     static var isHidden: Bool { current == hidden }
 
@@ -34,10 +48,7 @@ enum SystemBattery {
         set(original == -1 ? nil : original)
     }
 
-    private static func set(_ value: Int?) {
-        CFPreferencesSetValue(key, value.map { NSNumber(value: $0) }, domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
-        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
-    }
+    private static func set(_ value: Int?) { write(key as String, value.map { NSNumber(value: $0) }, true) }
 
     // MARK: The place in the menu bar
 
@@ -47,9 +58,7 @@ enum SystemBattery {
     static let positionedKey = "positioned"                                     // the swap has placed the item; ⌘-drags are the user's from then on
 
     /// Where Apple's item sits: its distance from the right edge of the menu bar.
-    static var applePosition: Double? {
-        (CFPreferencesCopyAppValue(applePositionKey as CFString, domain) as? NSNumber)?.doubleValue
-    }
+    static var applePosition: Double? { (read(applePositionKey, false) as? NSNumber)?.doubleValue }
 
     /// Puts JuiceLeft's item where Apple's battery item is — once per swap, before the status item exists (or before
     /// it is re-made). Returns true when a position was taken.
@@ -65,8 +74,7 @@ enum SystemBattery {
     /// Apple's item keeps its own position preference while hidden; should it ever be gone, the remembered one goes back.
     static func restorePosition(from defaults: UserDefaults) {
         guard applePosition == nil, let remembered = defaults.object(forKey: rememberedPositionKey) as? Double else { return }
-        CFPreferencesSetAppValue(applePositionKey as CFString, NSNumber(value: remembered), domain)
-        CFPreferencesAppSynchronize(domain)
+        write(applePositionKey, NSNumber(value: remembered), false)
     }
 
     /// System Settings › Control Center, the manual way back.
@@ -75,7 +83,7 @@ enum SystemBattery {
     }
 
     static func openBatterySettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")!)
+        _ = Opener.open(URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")!)
     }
 }
 
@@ -119,14 +127,27 @@ enum ChargeLimit {
         return (sel, unsafeBitCast(method_getImplementation(m), to: type))
     }
 
+    /// The PowerUI client behind the panel, as closures: FakeMac stands in for it and the real limit is never touched.
+    static var isSupported: () -> Bool = { clientSupported }
+    static var reader: () -> State? = { clientRead() }
+    static var writer: (Int) -> String? = { clientSet($0) }
+    static var topUp: () -> String? = { clientFullNow() }
+
     /// macOS 26.4+, the framework loads, and the system says this Mac can limit its charge.
-    static let supported: Bool = {
+    static var supported: Bool { isSupported() }
+    static func read() -> State? { reader() }
+    /// Sets the limit; 100 turns limiting off. Returns an error message, or nil.
+    static func set(_ limit: Int) -> String? { writer(limit) }
+    /// Apple's "charge to full now": one full charge, the limit untouched.
+    static func fullNow() -> String? { topUp() }
+
+    private static let clientSupported: Bool = {
         guard let client, let (sel, f) = imp(client, "isMCLSupported", BoolNoArg.self) else { return false }
         return f(client, sel)
     }()
 
-    static func read() -> State? {
-        guard supported, let client,
+    private static func clientRead() -> State? {
+        guard clientSupported, let client,
               let (sEnabled, enabled) = imp(client, "isMCLCurrentlyEnabled:", U64Err.self),
               let (sLimit, limit) = imp(client, "getMCLLimitWithError:", U8Err.self) else { return nil }
         var e1: NSError?, e2: NSError?
@@ -140,9 +161,8 @@ enum ChargeLimit {
         return State(enabled: on, limit: on ? value : 100, available: available)
     }
 
-    /// Sets the limit; 100 turns limiting off. Returns an error message, or nil.
-    static func set(_ limit: Int) -> String? {
-        guard supported, let client,
+    private static func clientSet(_ limit: Int) -> String? {
+        guard clientSupported, let client,
               let (sSet, setLimit) = imp(client, "setMCLLimit:error:", SetU8Err.self),
               let (sOn, enable) = imp(client, "enableMCL:", BoolErr.self),
               let (sOff, disable) = imp(client, "disableMCL:", BoolErr.self) else { return "Charge limit isn't available on this Mac." }
@@ -158,9 +178,8 @@ enum ChargeLimit {
         return nil
     }
 
-    /// Apple's "charge to full now": one full charge, the limit untouched.
-    static func fullNow() -> String? {
-        guard supported, let client, let (sel, f) = imp(client, "temporarilyDisableMCL:", BoolErr.self) else { return "Charge limit isn't available on this Mac." }
+    private static func clientFullNow() -> String? {
+        guard clientSupported, let client, let (sel, f) = imp(client, "temporarilyDisableMCL:", BoolErr.self) else { return "Charge limit isn't available on this Mac." }
         var error: NSError?
         return f(client, sel, &error) ? nil : error?.localizedDescription ?? "macOS didn't allow a full charge right now."
     }
@@ -201,9 +220,23 @@ enum PowerMode {
         return state
     }
 
-    static func read() -> State {
-        parse(custom: run(["-g", "custom"]), capabilities: run(["-g", "cap"]))
+    /// The helper's door, as closures: FakeMac stands in for the readiness checks, pmset's answer, the request file and the installer.
+    static var ready: () -> Bool = {
+        FileManager.default.contentsEqual(atPath: installedPath, andPath: bundledPath) && FileManager.default.isWritableFile(atPath: requestPath)
     }
+    static var reader: () -> State = { parse(custom: run(["-g", "custom"]), capabilities: run(["-g", "cap"])) }
+    static var writer: (String) -> String? = { line in
+        // atomically: false — the helper's folder is root-owned, so our file is rewritten in place.
+        do { try (line + "\n").write(toFile: requestPath, atomically: false, encoding: .utf8) }
+        catch { return "Couldn't hand the request to the helper: \(error.localizedDescription)" }
+        return nil
+    }
+    static var installed: () -> Bool = { FileManager.default.fileExists(atPath: installedPath) }
+    static var installer: () -> Admin.Outcome = {
+        Admin.run(bundledPath, ["install", NSUserName()], prompt: "JuiceLeft needs to install its helper for energy modes and the charging light. This is the only time it will ask.")
+    }
+
+    static func read() -> State { reader() }
 
     private static func run(_ arguments: [String]) -> String {
         let task = Process()
@@ -221,17 +254,14 @@ enum PowerMode {
     // MARK: The helper
 
     /// Installed, the same version as this build, and the request file is ours to write.
-    static var helperReady: Bool {
-        FileManager.default.contentsEqual(atPath: installedPath, andPath: bundledPath)
-            && FileManager.default.isWritableFile(atPath: requestPath)
-    }
+    static var helperReady: Bool { ready() }
 
     /// Some version of the helper is installed (so a signed self-update is possible when it isn't this one).
-    static var helperInstalled: Bool { FileManager.default.fileExists(atPath: installedPath) }
+    static var helperInstalled: Bool { installed() }
 
     /// The one admin prompt (password or Touch ID): installs everything JuiceLeft ever needs as root.
     static func installHelper() -> Admin.Outcome {
-        let outcome = Admin.run(bundledPath, ["install", NSUserName()], prompt: "JuiceLeft needs to install its helper for energy modes and the charging light. This is the only time it will ask.")
+        let outcome = installer()
         return outcome == .done && !helperReady ? .failed("The helper didn't install.") : outcome
     }
 
@@ -239,10 +269,5 @@ enum PowerMode {
     static func request(_ mode: Mode, onBattery: Bool) -> String { "\(onBattery ? "b" : "c") \(mode.rawValue)" }
 
     /// Asks the helper to set `mode` for the active source. Returns an error message, or nil.
-    static func set(_ mode: Mode, onBattery: Bool) -> String? {
-        // atomically: false — the helper's folder is root-owned, so our file is rewritten in place.
-        do { try (request(mode, onBattery: onBattery) + "\n").write(toFile: requestPath, atomically: false, encoding: .utf8) }
-        catch { return "Couldn't hand the request to the helper: \(error.localizedDescription)" }
-        return nil
-    }
+    static func set(_ mode: Mode, onBattery: Bool) -> String? { writer(request(mode, onBattery: onBattery)) }
 }
