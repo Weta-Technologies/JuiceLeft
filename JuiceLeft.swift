@@ -179,19 +179,19 @@ import SwiftUI
     check(loaded.warnAt == 25 && loaded.alertAt == 25 && loaded.tone == Tone.chimeName && loaded.menuBar == .words && loaded.replaceSystemIcon, "settings merge + clamp: \(loaded)")
 
     // Apps: helpers fold into the app; only real user apps get a Quit button.
-    let chrome = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/1/Helpers/Google Chrome Helper (GPU).app/Contents/MacOS/Google Chrome Helper (GPU)"
-    check(EnergyMeter.app(for: chrome).name == "Google Chrome" && EnergyMeter.app(for: chrome).bundle == "/Applications/Google Chrome.app", "helper → app")
+    let helper = "/Applications/Example Browser.app/Contents/Frameworks/Example Browser Framework.framework/Versions/1/Helpers/Example Browser Helper (GPU).app/Contents/MacOS/Example Browser Helper (GPU)"
+    check(EnergyMeter.app(for: helper).name == "Example Browser" && EnergyMeter.app(for: helper).bundle == "/Applications/Example Browser.app", "helper → app")
     check(EnergyMeter.app(for: "/usr/bin/python3").name == "python3" && EnergyMeter.app(for: "/usr/bin/python3").bundle == nil, "bare executable")
-    let before: EnergyMeter.Snapshot = [1: (1.0, chrome), 2: (5.0, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (0.0, "/usr/bin/python3"), 4: (2.0, "/bin/zsh")]
-    let after: EnergyMeter.Snapshot = [1: (3.0, chrome), 2: (6.0, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (0.5, "/usr/bin/python3"), 5: (9.0, "/bin/zsh")]
-    let userApps: Set<String> = ["/Applications/Google Chrome.app"]
+    let before: EnergyMeter.Snapshot = [1: (1.0, helper), 2: (5.0, "/Applications/Example Browser.app/Contents/MacOS/Example Browser"), 3: (0.0, "/usr/bin/python3"), 4: (2.0, "/bin/zsh")]
+    let after: EnergyMeter.Snapshot = [1: (3.0, helper), 2: (6.0, "/Applications/Example Browser.app/Contents/MacOS/Example Browser"), 3: (0.5, "/usr/bin/python3"), 5: (9.0, "/bin/zsh")]
+    let userApps: Set<String> = ["/Applications/Example Browser.app"]
     let ranked = EnergyMeter.rank(before: before, after: after, seconds: 3, apps: userApps)
-    check(ranked.apps.map(\.name) == ["Google Chrome"] && near(ranked.apps[0].cpuPercent, 100, 0.01) && near(ranked.apps[0].share, 3 / 3.5, 0.01), "ranking: apps only, share of the total: \(ranked)")
+    check(ranked.apps.map(\.name) == ["Example Browser"] && near(ranked.apps[0].cpuPercent, 100, 0.01) && near(ranked.apps[0].share, 3 / 3.5, 0.01), "ranking: apps only, share of the total: \(ranked)")
     check(ranked.background.map(\.name) == ["python3"] && near(ranked.backgroundShare, 0.5 / 3.5, 0.01), "ranking: the rest rolls up: \(ranked)")
-    let idle: EnergyMeter.Snapshot = [2: (5.02, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), 3: (9.0, "/usr/bin/python3")]
+    let idle: EnergyMeter.Snapshot = [2: (5.02, "/Applications/Example Browser.app/Contents/MacOS/Example Browser"), 3: (9.0, "/usr/bin/python3")]
     let quiet = EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps)
     check(quiet.apps.isEmpty && near(quiet.backgroundShare, 1, 0.01), "ranking: an app below 1% of a core is not listed")
-    check(!EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps, pinned: ["/Applications/Google Chrome.app"]).apps.isEmpty, "ranking: a quitting app stays pinned")
+    check(!EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps, pinned: ["/Applications/Example Browser.app"]).apps.isEmpty, "ranking: a quitting app stays pinned")
     check(EnergyMeter.rank(before: before, after: before, seconds: 3, apps: userApps) == Ranking(), "ranking: nothing used, nothing listed")
     check(EnergyMeter.isUserApp(bundle: "/Applications/SleepLess.app", bundleID: "io.github.cyborgfingers.sleepless", policy: .accessory), "a menu-bar app counts as the user's")
     check(!EnergyMeter.isUserApp(bundle: "/System/Library/CoreServices/Spotlight.app", bundleID: "com.apple.Spotlight", policy: .accessory), "Spotlight is background")
@@ -210,8 +210,8 @@ import SwiftUI
     }
     check(AppleIntelligence.keepsNumbers("Flat in 2 h 50 min, at 34%.", facts: "Battery 34%. Flat in 2 h 50 min."), "numbers kept")
     check(!AppleIntelligence.keepsNumbers("About 3 hours left.", facts: "Battery 34%. Flat in 2 h 50 min."), "invented number caught")
-    let facts = Insight.Facts(percent: 34, onAC: false, charging: false, full: false, minutesLeft: 170, ratePerHour: 12, typicalRate: 9, topApps: ["Chrome"])
-    check(Insight.template(facts).contains("faster") && Insight.template(facts).contains("Chrome"), "template: \(Insight.template(facts))")
+    let facts = Insight.Facts(percent: 34, onAC: false, charging: false, full: false, minutesLeft: 170, ratePerHour: 12, typicalRate: 9, topApps: ["Example Browser"])
+    check(Insight.template(facts).contains("faster") && Insight.template(facts).contains("Example Browser"), "template: \(Insight.template(facts))")
 
     // The menu bar's words and text parts, per display style.
     check(Format.words(130, charging: false) == "2 Hours 10 Min Remaining" && Format.words(120, charging: false) == "2 Hours Remaining", "words: hours")
@@ -258,7 +258,7 @@ import SwiftUI
     check(learnedDim.learned && near(learnedDim.fraction, 12 * (pow(0.85, 1.6) - pow(0.4, 1.6)) / (5 + 12 * pow(0.85, 1.6)), 0.15), "learned dimming saving: \(learnedDim.fraction)")
     check(warm.lowPower(rate: 12).learned && near(warm.lowPower(rate: 12).fraction, 3 / 12, 0.2), "learned Low Power saving: \(warm.lowPower(rate: 12).fraction)")
     var careFacts = CareFacts(onAC: false, percent: 25, level: 25, ratePerHour: 12, batteryWatts: 8, brightness: 0.85, keyboardOn: true, ambient: 300, lowPower: false,
-                          topApp: ("Chrome", 80, 0.5), usbDevices: [("Portable SSD", 900)])
+                          topApp: ("Example Browser", 80, 0.5), usbDevices: [("Portable SSD", 900)])
     let found = Tips.detect(careFacts, savings: cold)
     check(found.count == 2 && found.allSatisfy { $0.gain >= 0 } && found[0].gain >= found[1].gain, "two tips, biggest saving first: \(found.map { $0.id })")
     check(Set(Tips.detect(careFacts, savings: cold).map { $0.id }).isSubset(of: ["brightness", "keyboard", "lowpower", "app", "usb"]), "tip ids")

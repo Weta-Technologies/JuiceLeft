@@ -17,7 +17,7 @@ struct Ranking: Equatable {
 }
 
 /// Which apps are using the most power right now. Samples every process's CPU time every 3 s — but only while the
-/// panel is open — and folds helper processes into the app that owns them (every Chrome helper → Google Chrome).
+/// panel is open — and folds helper processes into the app that owns them (a browser's helpers → the browser app).
 /// Each row can quit its app: a graceful `terminate()` first (the app's own save prompts protect unsaved work), and
 /// if it is still there 5 s later, a force quit behind one confirmation.
 /// ponytail: CPU time is the proxy; GPU and networking aren't billed per process without root, and neither are
@@ -134,7 +134,7 @@ struct Ranking: Equatable {
                        backgroundShare: rest.reduce(0) { $0 + $1.value.cpu } / total)
     }
 
-    /// The outermost .app on the path (so a helper inside a framework inside Chrome is Chrome), else the executable.
+    /// The outermost .app on the path (so a browser's helper inside its framework is the browser app), else the executable.
     nonisolated static func app(for path: String) -> (key: String, name: String, bundle: String?) {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
         if let i = parts.firstIndex(where: { $0.hasSuffix(".app") }) {
