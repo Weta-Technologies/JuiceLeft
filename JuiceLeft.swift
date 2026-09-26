@@ -129,6 +129,17 @@ import SwiftUI
     let later = Learner.chargeForecast(Array(trace.prefix(11)), level: trace[10].level, now: trace[10].at, target: 80)
     check((3...7).contains(later?.minutes ?? 0), "five minutes in, at 75.5 %: \(String(describing: later?.minutes)) min to go")
     check(Learner.chargeForecast(trace, level: 80.5, now: trace.last!.at, target: 80) == nil, "at the limit: no countdown")
+    // Above 80 % the gauge's own current is already tapered: a 60 %/h charger seen from 84 % on is still on course
+    // for the 60 %/h time to full, not a second taper's.
+    var tapering = [Sample(at: at(0), level: 84, ratePerHour: 60 * Learner.taper(at: 84))]
+    for i in 1...40 {
+        let l = tapering[i - 1].level + 60 * Learner.taper(at: tapering[i - 1].level) * 0.5 / 60
+        tapering.append(Sample(at: at(Double(i) * 0.5), level: l, ratePerHour: 60 * Learner.taper(at: l)))
+    }
+    let late = Learner.chargeForecast(tapering, level: tapering.last!.level, now: tapering.last!.at)
+    let lateWant = Learner.chargeHours(from: tapering.last!.level, to: 100, rate: 60) * 60
+    check(near(Double(late?.minutes ?? 0), lateWant, 0.05) && near(late?.ratePerHour ?? 0, 60 * Learner.taper(at: tapering.last!.level), 0.05),
+          "above 80 %: \(String(describing: late?.minutes)) min to full against \(Int(lateWant)), measured \(String(describing: late?.ratePerHour)) %/h")
     check(Learner.chargeForecast([Sample(at: at(0), level: 71, ratePerHour: nil)], level: 71, now: at(0), target: 80) == nil, "a sample without a measured rate is no measurement")
     let toFull = Learner.chargeForecast(Array(trace.prefix(2)), level: trace[1].level, now: trace[1].at)
     let straight = (100 - trace[1].level) / (toFull?.ratePerHour ?? 1) * 60

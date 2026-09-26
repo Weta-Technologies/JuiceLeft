@@ -215,8 +215,10 @@ struct Learner: Codable, Equatable {
     /// the last minute — from the first sample after plug-in, with the level curve's own trend blended in once it has
     /// one. macOS's figure isn't used: it averages the slow first minutes into an hour-plus estimate and always aims at
     /// 100 %. Above 80 % the charger tapers, modelled as the rate falling linearly to a fifth of itself at 100 % (that
-    /// stretch takes about twice what a straight line would); below 80 % nothing slows it. nil until there is a
-    /// measurement, and nil at or past the target.
+    /// stretch takes about twice what a straight line would); below 80 % nothing slows it. A rate measured above 80 %
+    /// is already tapered, so it is scaled back to the rate the taper starts from before the rest of the way is
+    /// worked out (the forecast's `ratePerHour` stays the measured one). nil until there is a measurement, and nil at
+    /// or past the target.
     static func chargeForecast(_ samples: [Sample], level: Double, now: Date, target: Int = 100) -> Forecast? {
         let goal = Double(min(max(target, 1), 100))
         guard level < goal else { return nil }
@@ -225,13 +227,21 @@ struct Learner: Codable, Equatable {
             guard let r = s.ratePerHour, r > 0 else { continue }
             let w = exp(-now.timeIntervalSince(s.at) / chargeTau)
             wsum += w
-            rsum += w * r
+            rsum += w * r / taper(at: s.level)
         }
         guard wsum > 0 else { return nil }
         var rate = rsum / wsum
-        if let trend = liveAndTrend(samples, now: now).trend, trend > 0 { rate = (2 * rate + trend) / 3 }
+        if let trend = liveAndTrend(samples, now: now).trend, trend > 0 {   // the line's slope is the rate around its mean level
+            let recent = samples.filter { now.timeIntervalSince($0.at) <= window }.map(\.level)
+            rate = (2 * rate + trend / taper(at: recent.reduce(0, +) / Double(recent.count))) / 3
+        }
         let hours = min(chargeHours(from: level, to: goal, rate: rate), maxHours)
-        return Forecast(kind: .full, minutes: Int((hours * 60).rounded()), at: now.addingTimeInterval(hours * 3600), ratePerHour: rate, target: Int(goal))
+        return Forecast(kind: .full, minutes: Int((hours * 60).rounded()), at: now.addingTimeInterval(hours * 3600), ratePerHour: rate * taper(at: level), target: Int(goal))
+    }
+
+    /// The share of the charge rate left at a level: 1 up to 80 %, then falling linearly to `taperFloor` at 100 %.
+    static func taper(at level: Double) -> Double {
+        1 - (1 - taperFloor) * min(max(level - taperFrom, 0), 100 - taperFrom) / (100 - taperFrom)
     }
 
     /// Hours from one level up to another at `rate` %/h: straight up to 80 %, then through the taper, where the rate
