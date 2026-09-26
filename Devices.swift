@@ -36,8 +36,13 @@ enum AccessoryBattery {
         return .other
     }
 
+    /// The registry walk, as a closure: --e2e hands in made-up accessories instead.
+    static var scan: () -> [Device] = { registry() }
+
     /// The connected accessories with a battery level, most-drained first.
-    static func read() -> [Device] {
+    static func read() -> [Device] { scan() }
+
+    private static func registry() -> [Device] {
         var found: [String: Device] = [:]
         for service in ["AppleDeviceManagementHIDEventService", "IOHIDDevice"] {
             var iterator: io_iterator_t = 0

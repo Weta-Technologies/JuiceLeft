@@ -248,6 +248,12 @@ runs the helper against a fake `pmset` and a fake light tool (no root needed) an
 
 runs the in-app updater end to end without GitHub: it serves a fake latest-release feed and a signed zip of this build re-versioned as 9.9.9 from a local web server, then runs a *copy* of the app from a temp folder with `--update-test <feed> <key> <log>`, which does exactly what Update Now does — check, download, verify, unpack, sanity-check, swap, relaunch — and proves the copy comes back as 9.9.9 with nothing left behind, that a zip signed with the wrong key and a tampered zip are refused with the copy untouched, and that your real settings never change. Your installed JuiceLeft is not involved.
 
+```bash
+./test-e2e.sh
+```
+
+drives every user-facing function end to end on a throwaway copy of this build with its own bundle id, settings and history: the menu-bar item's click, hold and hover card, every panel control, the `juiceleft://` commands (and hostile ones), the notch rule, the forecasts against simulated drain and charge traces, and every notification — with the Mac behind stand-ins (the helper, the charge limit, the charging light, the battery item, notifications, the login item, accessories and the update feed), so nothing real changes. It prints one row per function, says what it couldn't reach and why, and exits 0 only when every row passed.
+
 ## Security & privacy
 
 - **No analytics, no accounts.** The only network activity is the [update check](#updates) — a plain request to GitHub for the latest release, about once a day, which you can turn off — and the download you start with Update Now. Nothing about you or your Mac is sent; the Apple Intelligence sentence is generated on device.

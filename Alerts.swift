@@ -53,8 +53,10 @@ enum Alerts {
     nonisolated static let chimeName = "Chime"
     nonisolated static let names = [chimeName, "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
     private var playing: NSSound?
+    var recorder: ((String, Double) -> Void)?   // --e2e: what would have played, and nothing sounds
 
     func play(_ name: String, volume: Double) {
+        if let recorder { return recorder(name, volume) }
         playing?.stop()
         let sound = name == Self.chimeName ? NSSound(data: Self.chime) : NSSound(named: NSSound.Name(name))
         sound?.volume = Float(max(0, min(1, volume)))

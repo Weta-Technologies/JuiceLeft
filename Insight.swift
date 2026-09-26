@@ -88,11 +88,20 @@ enum AppleIntelligence {
 
     static var available: Bool { status == .available }
 
-    static var status: Status {
+    static var status: Status { statusNow() }
+
+    /// The system model's status and its sentence, as closures: --e2e stands in for the model.
+    static var statusNow: () -> Status = {
         #if canImport(FoundationModels)
         if #available(macOS 26, *) { return Bridge.status }
         #endif
         return .unsupported
+    }
+    static var phraser: (Insight.Facts) async -> String? = { f in
+        #if canImport(FoundationModels)
+        if #available(macOS 26, *) { return await Bridge.phrase(f) }
+        #endif
+        return nil
     }
 
     /// The first-launch line asking to turn Apple Intelligence on: only when this Mac could run it but hasn't, and
@@ -101,17 +110,12 @@ enum AppleIntelligence {
 
     /// System Settings › Apple Intelligence & Siri (macOS 26's pane id), or System Settings itself if that link fails.
     static func openSettings() {
-        if !NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+        if !Opener.open(URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!) {
+            _ = Opener.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
         }
     }
 
-    static func phrase(_ f: Insight.Facts) async -> String? {
-        #if canImport(FoundationModels)
-        if #available(macOS 26, *) { return await Bridge.phrase(f) }
-        #endif
-        return nil
-    }
+    static func phrase(_ f: Insight.Facts) async -> String? { await phraser(f) }
 
     /// Every number in the model's sentence must already be in the facts it was given.
     static func keepsNumbers(_ sentence: String, facts: String) -> Bool {

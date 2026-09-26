@@ -23,7 +23,11 @@ import SwiftUI
     private var sinks: [AnyCancellable] = []
     private var monitors: [Any] = []
     private var openedAt = Date.distantPast
-    private var hover: HoverCard?
+    private(set) var hover: HoverCard?
+    var panelShown: Bool { popover.isShown }
+    /// --e2e: a synthetic menu bar in place of the window list and the screen — whether our item is on screen, the
+    /// other items' frames, and the notch.
+    var fakeRoom: (onScreen: Bool, items: [CGRect], notch: CGRect?)?
 
     init(monitor: Monitor) {
         self.monitor = monitor
@@ -155,10 +159,10 @@ import SwiftUI
     /// deliberately not a signal: a menu-bar organiser's overlay covers the item without hiding it. On a screen with a
     /// camera notch the notch rule decides both ways — a neighbour hidden in the gap squeezes the words, and they come
     /// back only when they would fit; elsewhere the full form is tried again every few minutes.
-    private func checkRoom() {
+    func checkRoom() {
         guard let window = item.button?.window, let screen = NSScreen.main, let bar = NSScreen.screens.first else { return }
-        let onScreen = screen.frame.intersects(window.frame) && window.frame.width > 1
-        let notch = Self.notch(of: bar)
+        let onScreen = fakeRoom?.onScreen ?? (screen.frame.intersects(window.frame) && window.frame.width > 1)
+        let notch = fakeRoom.map(\.notch) ?? Self.notch(of: bar)
         if !onScreen {
             guard !monitor.squeezed else { return }
             monitor.setSqueezed(true)
@@ -171,8 +175,8 @@ import SwiftUI
         }
         guard let notch, monitor.interactive, monitor.s.menuBar == .words else { return }
         let widths = monitor.itemWidths
-        if let decision = Self.notchDecision(squeezed: monitor.squeezed, items: Self.statusItems(on: bar, own: window.windowNumber), notch: notch,
-                                             wordsWidth: widths.words, compactWidth: widths.compact) {
+        let items = fakeRoom?.items ?? Self.statusItems(on: bar, own: window.windowNumber)
+        if let decision = Self.notchDecision(squeezed: monitor.squeezed, items: items, notch: notch, wordsWidth: widths.words, compactWidth: widths.compact) {
             monitor.setSqueezed(decision)
         }
     }
@@ -196,7 +200,7 @@ import SwiftUI
         return false
     }
 
-    @objc private func clicked() {
+    @objc func clicked() {
         hover?.hide()
         if popover.isShown {
             guard Date().timeIntervalSince(openedAt) > 0.5 else { return }   // the same press bouncing back, not a second click
@@ -204,10 +208,14 @@ import SwiftUI
         }
         // No mouse event behind the action (VoiceOver's press, for one): that is a request for the panel.
         guard let event = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown].contains(event.type) else { return open() }
-        let gesture = Self.gesture(event.type, control: event.modifierFlags.contains(.control)) {
+        perform(Self.gesture(event.type, control: event.modifierFlags.contains(.control)) {
             // Peek (no dequeue) so the button's own tracking still sees the mouse-up.
             NSApp.nextEvent(matching: .leftMouseUp, until: Date(timeIntervalSinceNow: Self.holdDelay), inMode: .eventTracking, dequeue: false) != nil
-        }
+        })
+    }
+
+    /// What a click or a hold does (internal, so --e2e can reach both without a mouse).
+    func perform(_ gesture: Gesture) {
         switch gesture {
         case .panel: open()
         case .toggle:   // the moment the hold registers: the glyph changes and the trackpad taps back
@@ -220,7 +228,7 @@ import SwiftUI
         AnyView(Panel(monitor: monitor).environment(\.panelVisible, visible))
     }
 
-    private func open() {
+    func open() {
         guard let button = item.button, !popover.isShown else { return }
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         host.rootView = Self.panel(monitor, visible: true)
@@ -235,7 +243,7 @@ import SwiftUI
         monitor.panelOpened()   // top apps and energy modes only refresh while the panel is open
     }
 
-    private func close() {
+    func close() {
         guard popover.isShown else { return }
         popover.close()
         monitor.panelClosed()

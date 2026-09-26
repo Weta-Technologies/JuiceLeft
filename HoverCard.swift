@@ -12,9 +12,9 @@ import SwiftUI
     private let monitor: Monitor
     private let button: NSStatusBarButton
     private let tracker = Tracker()
-    private var panel: NSPanel?
+    private(set) var panel: NSPanel?
     private var timer: Timer?
-    private var showing = false
+    private(set) var showing = false
 
     private var inside = false
     private var monitors: [Any] = []
@@ -45,7 +45,8 @@ import SwiftUI
         if now != inside { crossed(now) }
     }
 
-    private func crossed(_ entered: Bool) {
+    /// The pointer came over the item, or left it (internal, so --e2e can hover without a mouse).
+    func crossed(_ entered: Bool) {
         guard entered != inside else { return }
         inside = entered
         if entered { armed() } else { hide() }

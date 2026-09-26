@@ -38,11 +38,14 @@ struct Ranking: Equatable {
     private var timer: Timer?
     private var previous: Snapshot = [:]
     private var previousAt = Date()
+    /// The process table and the running apps, as closures: --e2e measures and quits made-up apps, never real ones.
+    nonisolated(unsafe) static var processes: () -> Snapshot = { snapshot() }
+    static var running: () -> [NSRunningApplication] = { NSWorkspace.shared.runningApplications }
 
     func start() {
         guard timer == nil else { return }
         measuring = true
-        previous = Self.snapshot()
+        previous = Self.processes()
         previousAt = Date()
         let timer = Timer(timeInterval: Self.interval, repeats: true) { _ in MainActor.assumeIsolated { self.sample() } }
         RunLoop.main.add(timer, forMode: .common)
@@ -64,7 +67,7 @@ struct Ranking: Equatable {
         for (id, _) in quitting where Self.runningApp(id) == nil { quitting[id] = nil }   // gone: the row goes with it
         let pinned = Set(quitting.keys), apps = Self.userApps()
         DispatchQueue.global(qos: .utility).async {
-            let now = Self.snapshot(), at = Date()
+            let now = Self.processes(), at = Date()
             let ranked = Self.rank(before: before, after: now, seconds: at.timeIntervalSince(beforeAt), apps: apps, pinned: pinned)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -79,7 +82,7 @@ struct Ranking: Equatable {
 
     /// The bundles of the user's own apps — ordinary and menu-bar apps, not the system's agents.
     static func userApps() -> Set<String> {
-        Set(NSWorkspace.shared.runningApplications.compactMap { app in
+        Set(running().compactMap { app in
             guard let bundle = app.bundleURL?.path, isUserApp(bundle: bundle, bundleID: app.bundleIdentifier, policy: app.activationPolicy) else { return nil }
             return bundle
         })
@@ -167,7 +170,7 @@ struct Ranking: Equatable {
     }
 
     static func runningApp(_ id: String) -> NSRunningApplication? {
-        NSWorkspace.shared.runningApplications.first { $0.bundleURL?.path == id && !$0.isTerminated }
+        running().first { $0.bundleURL?.path == id && !$0.isTerminated }
     }
 
     /// The running app behind a row, if it may be quit.

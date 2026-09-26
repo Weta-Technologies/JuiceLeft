@@ -19,12 +19,14 @@ import SwiftUI
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var monitor: Monitor?
-    private var statusItem: StatusItemController?
+    var monitor: Monitor?
+    var statusItem: StatusItemController?
+    var quitIntercept: (() -> Bool)?   // --e2e: Quit is watched, not obeyed
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Updater.shared.testRun { return Updater.shared.start() }   // --update-test: only the updater, on a copy of the app
         let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--e2e"), i + 1 < args.count { E2E.run(dir: args[i + 1], delegate: self) }   // every function, on fakes
         let simulate = args.contains("--simulate")
         if simulate { FakeMac().install() }   // the helper, the charge limit and the battery item are stand-ins: nothing real changes
         let source: BatterySource = simulate ? Simulator(hold: args.contains("hold")) : LiveBattery()
@@ -43,6 +45,8 @@ import SwiftUI
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply { quitIntercept?() == true ? .terminateCancel : .terminateNow }
 
     /// The user's own shortcuts and scripts drive JuiceLeft through its `juiceleft://` scheme; only the whitelisted actions run.
     func application(_ application: NSApplication, open urls: [URL]) {

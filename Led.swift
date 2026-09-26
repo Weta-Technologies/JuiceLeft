@@ -111,7 +111,7 @@ final class Lid {
     var changed: ((Bool) -> Void)?
     private(set) var closed = Lid.read()
 
-    static func read() -> Bool {
+    static var read: () -> Bool = {   // --e2e keeps it open
         IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool ?? false
     }
 

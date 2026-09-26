@@ -143,16 +143,15 @@ final class LiveBattery: BatterySource {
 }
 
 enum LoginItem {
-    static var isOn: Bool { SMAppService.mainApp.status == .enabled }
+    /// launchd's registration, as closures: --e2e never registers a test copy.
+    static var status: () -> Bool = { SMAppService.mainApp.status == .enabled }
+    static var apply: (Bool) throws -> Void = { on in if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+
+    static var isOn: Bool { status() }
 
     /// Returns an error message, or nil on success.
     static func set(_ on: Bool) -> String? {
-        do {
-            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            return nil
-        } catch {
-            return error.localizedDescription
-        }
+        do { try apply(on); return nil } catch { return error.localizedDescription }
     }
 }
 

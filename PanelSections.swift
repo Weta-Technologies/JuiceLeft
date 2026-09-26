@@ -15,7 +15,7 @@ struct AlertsCard: View {
 
     private var animation: Animation? { reduceMotion ? nil : panelEase }
 
-    private var subtitle: String {
+    var subtitle: String {
         guard monitor.s.armed else { return "Off: nothing flashes or sounds" }
         if let until = monitor.snoozedUntil { return "Quiet until \(Format.clock(until))" }
         switch monitor.phase {
@@ -25,7 +25,7 @@ struct AlertsCard: View {
         }
     }
 
-    private var notificationNote: String {
+    var notificationNote: String {
         monitor.notificationsAllowed == false ? "Turned off for JuiceLeft in System Settings › Notifications" : "With the time to flat"
     }
 
@@ -112,7 +112,7 @@ struct EnergyCard: View {
     private var ranking: Ranking { meter.ranking }
     private var measured: Bool { !ranking.apps.isEmpty || ranking.backgroundShare > 0 }
 
-    private var subtitle: String {
+    var subtitle: String {
         if !measured { return meter.measuring ? "Measuring your apps…" : "Nothing is using much power" }
         return ranking.apps.isEmpty ? "None of your apps is using much power" : "Your apps, by share of processor time"
     }
@@ -250,7 +250,7 @@ struct BatteryCard: View {
         _expanded = AppStorage(wrappedValue: false, "healthExpanded", store: monitor.defaults)
     }
 
-    private var summary: String {
+    var summary: String {
         guard let r = monitor.reading else { return "No battery" }
         var parts: [String] = []
         if let h = r.health { parts.append("Health \(Int(h.rounded()))%") }
@@ -351,7 +351,7 @@ struct StretchCard: View {
         _expanded = AppStorage(wrappedValue: false, "stretchExpanded", store: monitor.defaults)
     }
 
-    private var summary: String {
+    var summary: String {
         var parts: [String] = []
         if monitor.s.smartLowPower { parts.append("Smart Low Power") }
         if monitor.s.brightnessCap { parts.append("Screen ≤ \(Int((monitor.s.brightnessCapLevel * 100).rounded()))%") }
@@ -547,7 +547,7 @@ struct HistoryCard: View {
         monitor.reading.flatMap { History.summary(monitor.history.points, since: $0.at.addingTimeInterval(-Double(hours) * 3600)) }
     }
 
-    private var subtitle: String {
+    var subtitle: String {
         guard let s = summary else { return "Battery level over time" }
         var parts = ["\(s.from)% → \(s.to)%"]
         if let d = s.drainPerHour { parts.append(String(format: "about %.0f%%/h on battery", d)) }
@@ -596,7 +596,7 @@ struct DevicesCard: View {
         _expanded = AppStorage(wrappedValue: false, "devicesExpanded", store: monitor.defaults)
     }
 
-    private var subtitle: String {
+    var subtitle: String {
         guard let lowest = monitor.devices.first else { return "No accessories with a battery" }
         if monitor.devices.count == 1 { return "\(lowest.name) · \(lowest.percent)%" }
         return "\(lowest.name) \(lowest.percent)% · \(monitor.devices.count - 1) more"
@@ -669,7 +669,7 @@ struct ChargingCard: View {
         _expanded = AppStorage(wrappedValue: false, "chargingExpanded", store: monitor.defaults)
     }
 
-    private var summary: String {
+    var summary: String {
         if let slow = monitor.chargerAdvice { return slow }   // a weak charger is the one thing worth saying first
         var parts: [String] = []
         if monitor.s.unplugReminder { parts.append("Unplug at \(Monitor.unplugAt)%") }
@@ -733,7 +733,7 @@ struct MoreRows: View {
         _expanded = AppStorage(wrappedValue: false, "moreExpanded", store: monitor.defaults)
     }
 
-    private var summary: String {
+    var summary: String {
         var parts: [String] = []
         if let key = monitor.s.hotKey { parts.append("Shortcut \(key.label)") }
         if monitor.s.menuBarWatts, monitor.s.menuBar != .icon { parts.append("Power draw") }
@@ -791,7 +791,7 @@ struct LightRows: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var light: LightController
 
-    private var status: String {
+    var status: String {
         if !light.onMagSafe { return monitor.reading?.onAC == true ? "Charging through USB-C: no light to drive" : "Shows while charging through MagSafe" }
         if light.needsSetup { return "Needs a one-time setup" }
         return light.holding.map { "MagSafe · now \($0.name)" } ?? "MagSafe · macOS's own colours"
