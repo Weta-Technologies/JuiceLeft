@@ -270,7 +270,7 @@ struct History: Codable, Equatable {
         if let forecast { _ = steady.update(forecast.minutes) }
         energy.show(sample: ranking)
         insight.update(facts, ai: false)
-        let parts = Self.menuParts(s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: forecast?.minutes)
+        let parts = Self.menuParts(s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: forecast?.minutes, goal: forecast?.goalText ?? "Full")
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
     }
 
@@ -514,6 +514,17 @@ struct History: Codable, Equatable {
 
     // MARK: Care
 
+    /// The level a charge stops at: Apple's charge limit while one is set (and no top-up is under way), else 100.
+    var chargeTarget: Int { travelFull == nil ? (chargeLimit.flatMap { $0.enabled ? $0.limit : nil } ?? 100) : 100 }
+
+    /// "Held at 80%" while the charge limit has stopped the charge there — the header and the hover card say so
+    /// instead of counting down; the menu-bar item stays Apple's plain "80%".
+    var heldLine: String? {
+        guard let r = reading, chargeTarget < 100,
+              let line = Self.fullNotice(full: r.full, onAC: r.onAC, charging: r.charging, percent: r.percent, limit: chargeTarget), line.hasPrefix("Held") else { return nil }
+        return line
+    }
+
     /// A quiet word when the charger in use is too weak to charge at full speed.
     var chargerAdvice: String? {
         guard let r = reading else { return nil }
@@ -580,12 +591,13 @@ struct History: Codable, Equatable {
         guard let r = reading else { return ("No battery", "JuiceLeft needs a Mac with a battery", false) }
         let title: String
         if r.onAC {
-            title = r.full ? "Fully Charged" : r.charging ? steady.shown.map { Format.words($0, charging: true) } ?? "Estimating…" : "On Power, Not Charging"
+            title = r.full ? "Fully Charged" : r.charging ? steady.shown.map { Format.words($0, charging: true, goal: forecast?.goalText ?? "Full") } ?? "Estimating…"
+                : heldLine ?? "On Power, Not Charging"
         } else {
             title = steady.shown.map { Format.words($0, charging: false) } ?? "Estimating…"
         }
         var parts: [String] = []
-        if let f = forecast { parts.append(f.kind == .flat ? "Flat around \(Format.clock(f.at))" : "Full around \(Format.clock(f.at))") }
+        if let f = forecast { parts.append(f.kind == .flat ? "Flat around \(Format.clock(f.at))" : "\(f.goalText) around \(Format.clock(f.at))") }
         parts.append("\(r.percent)%")
         if r.onAC, let w = r.adapterWatts { parts.append("\(w) W charger") }
         switch phase {
@@ -689,7 +701,7 @@ struct History: Codable, Equatable {
     private func evaluate() {
         guard let r = reading else { return }
         if r.onAC {
-            forecast = r.charging && !r.full ? Learner.chargeForecast(samples, level: r.level, now: r.at, osMinutes: r.osMinutesLeft) : nil
+            forecast = r.charging && !r.full ? Learner.chargeForecast(samples, level: r.level, now: r.at, target: chargeTarget) : nil
         } else {
             forecast = history.learner.step(samples, now: r.at)
         }
@@ -716,11 +728,12 @@ struct History: Codable, Equatable {
         }
         let minutes = forecast.map { steady.update($0.minutes) }
         let wattsText = s.menuBarWatts ? r.batteryWatts.flatMap { abs($0) >= 0.5 ? Format.signedWatts($0) : nil } : nil
+        let goal = forecast?.goalText ?? "Full"
         let parts = Self.menuParts(squeezed && s.menuBar == .words ? .compact : s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full,
-                                   charging: r.charging, minutes: minutes, wattsText: wattsText)
+                                   charging: r.charging, minutes: minutes, wattsText: wattsText, goal: goal)
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
         let width = { (style: Settings.MenuBar) -> CGFloat in   // the item in each form, for the notch rule
-            let p = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: minutes, wattsText: wattsText)
+            let p = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: minutes, wattsText: wattsText, goal: goal)
             return MenuIcon.width(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: self.s.armed, percent: p.percent, trailing: p.trailing))
         }
         itemWidths = (width(.words), width(.compact))
@@ -815,7 +828,7 @@ struct History: Codable, Equatable {
 
     var forecastLine: String {
         guard let f = forecast else { return "Still working out the time to flat." }
-        return f.kind == .flat ? "Flat around \(Format.clock(f.at)) (\(Format.duration(f.minutes)))." : "Full around \(Format.clock(f.at))."
+        return f.kind == .flat ? "Flat around \(Format.clock(f.at)) (\(Format.duration(f.minutes)))." : "\(f.goalText) around \(Format.clock(f.at))."
     }
 
     /// The panel header's first line.
@@ -823,8 +836,8 @@ struct History: Codable, Equatable {
         guard let r = reading else { return "No battery found" }
         if r.onAC {
             if r.full { return "Fully charged" }
-            if r.charging { return forecast.map { "Full around \(Format.clock($0.at))" } ?? "Charging" }
-            return "On power, not charging"
+            if r.charging { return forecast.map { "\($0.goalText) around \(Format.clock($0.at))" } ?? "Charging" }
+            return heldLine ?? "On power, not charging"
         }
         return forecast.map { "Flat around \(Format.clock($0.at))" } ?? "Estimating time to flat…"
     }
@@ -834,21 +847,21 @@ struct History: Codable, Equatable {
         guard let r = reading else { return "JuiceLeft needs a Mac with a battery" }
         var parts = ["\(r.percent)%"]
         if let f = forecast {
-            parts.append(f.kind == .flat ? "\(Format.duration(f.minutes)) left" : "\(Format.duration(f.minutes)) to full")
+            parts.append((f.kind == .flat ? "\(Format.duration(f.minutes)) left" : "\(Format.duration(f.minutes)) to \(f.target < 100 ? f.goalText : "full")").nonBreaking)
         } else if !r.onAC, let os = r.osMinutesLeft {
             parts.append("macOS says \(Format.duration(os))")
         }
-        if r.onAC, let w = r.adapterWatts { parts.append("\(w) W charger") }
-        else if let w = r.batteryWatts, w < 0 { parts.append(Format.watts(w)) }
-        if r.lowPowerMode { parts.append("Low Power Mode") }
-        return parts.joined(separator: " · ")
+        if r.onAC, let w = r.adapterWatts { parts.append("\(w) W charger".nonBreaking) }
+        else if let w = r.batteryWatts, w < 0 { parts.append(Format.watts(w).nonBreaking) }
+        if r.lowPowerMode { parts.append("Low Power Mode".nonBreaking) }
+        return parts.joined(separator: " · ")   // each part holds together; a long line breaks only at a dot
     }
 
     /// The text either side of the glyph, per the display setting: Apple's "84%" in front, and after it the time —
-    /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full"), or compact ("2:10", "Full 45m"); "Estimating…"
+    /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full" — "Until 80%" with a charge limit), or compact ("2:10", "Full 45m"); "Estimating…"
     /// (or "…") until there is a forecast; nothing at all when the battery is full. Pure, so --selftest can check it.
-    nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?, wattsText: String? = nil)
-        -> (percent: String?, trailing: String?) {
+    nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?, wattsText: String? = nil,
+                                      goal: String = "Full") -> (percent: String?, trailing: String?) {
         let pct = "\(percent)%"
         var trailing: String?
         switch style {
@@ -856,7 +869,7 @@ struct History: Codable, Equatable {
         case .percent: break
         case .compact, .words:
             if onAC && (full || !charging) { break }
-            else if let minutes { trailing = style == .words ? Format.words(minutes, charging: onAC) : onAC ? "Full \(Format.compact(minutes))" : Format.compact(minutes) }
+            else if let minutes { trailing = style == .words ? Format.words(minutes, charging: onAC, goal: goal) : onAC ? "\(goal) \(Format.compact(minutes))" : Format.compact(minutes) }
             else { trailing = style == .words ? "Estimating…" : "…" }
         }
         if let wattsText { trailing = [trailing, wattsText].compactMap { $0 }.joined(separator: " · ") }
@@ -868,7 +881,8 @@ struct History: Codable, Equatable {
         guard style != .icon else { return "the battery alone" }
         guard let r = reading else { return "the battery" }
         let wattsText = s.menuBarWatts ? r.batteryWatts.flatMap { abs($0) >= 0.5 ? Format.signedWatts($0) : nil } : nil
-        let parts = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: steady.shown ?? forecast?.minutes, wattsText: wattsText)
+        let parts = Self.menuParts(style, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: steady.shown ?? forecast?.minutes, wattsText: wattsText,
+                                   goal: forecast?.goalText ?? "Full")
         return [parts.percent, "battery", parts.trailing].compactMap { $0 }.joined(separator: " · ")
     }
 
@@ -887,7 +901,7 @@ struct History: Codable, Equatable {
         Insight.Facts(percent: reading?.percent ?? 0, onAC: reading?.onAC ?? false, charging: reading?.charging ?? false,
                       full: reading?.full ?? false, minutesLeft: forecast?.minutes, ratePerHour: forecast?.ratePerHour,
                       typicalRate: reading.map { history.learner.prior(at: $0.at) } ?? nil,
-                      topApps: energy.ranking.apps.prefix(2).map(\.name))
+                      topApps: energy.ranking.apps.prefix(2).map(\.name), target: forecast?.target ?? 100)
     }
 }
 

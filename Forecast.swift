@@ -15,6 +15,10 @@ struct Forecast: Equatable {
     var at: Date
     var ratePerHour: Double     // the rate it rests on, %/h, always positive
     var learned = false         // a learned prior took part
+    var target = 100            // charging: the level it aims at — Apple's charge limit when one is set, else 100
+
+    /// "Full", or "80%" when a charge limit is the goal — the word every "… Until Full" and "Full around …" uses.
+    var goalText: String { target < 100 ? "\(target)%" : "Full" }
 }
 
 /// Keeps the menu bar's spelled-out time from flip-flopping: the shown value (rounded to five minutes) only moves when
@@ -53,7 +57,7 @@ struct Learner: Codable, Equatable {
 
     var buckets = [Bucket](repeating: Bucket(), count: 12)
     var global = Bucket()
-    var errors = [Double](repeating: 3, count: RateSource.allCases.count)   // EW mean |miss| per opinion, %/h; start equal
+    var errors = [3.0, 3.0, 9.0]         // EW mean |miss| per opinion (live, trend, prior), %/h: a typical rate starts as the least trusted
     var bias = 0.0                       // EW mean of (actual − blended), signed %/h
     var relativeError: Double?           // EW mean of |forecast − actual arrival| / actual, per discharge
     var discharges = 0                   // how many discharges have scored the accuracy
@@ -202,16 +206,43 @@ struct Learner: Codable, Equatable {
 
     // MARK: Charging
 
-    /// Time to full: macOS's estimate when it has one (it knows the taper near the top), else the curve's own rate.
-    static func chargeForecast(_ samples: [Sample], level: Double, now: Date, osMinutes: Int?) -> Forecast? {
-        if let osMinutes {
-            return Forecast(kind: .full, minutes: osMinutes, at: now.addingTimeInterval(Double(osMinutes) * 60),
-                            ratePerHour: (100 - level) / max(Double(osMinutes) / 60, 0.01))
+    static let taperFrom = 80.0                      // above this the charger tapers…
+    static let taperFloor = 0.2                      // …to a fifth of the rate at 100 %, falling linearly
+    static let chargeTau: TimeInterval = 60          // the measured charge rate settles within about a minute of plug-in
+
+    /// Time to the level the Mac will stop at: Apple's charge limit when one is set (`target` < 100), else 100 %. The
+    /// rate is measured — the gas gauge's charge current over the pack's capacity (watts over watt-hours), smoothed over
+    /// the last minute — from the first sample after plug-in, with the level curve's own trend blended in once it has
+    /// one. macOS's figure isn't used: it averages the slow first minutes into an hour-plus estimate and always aims at
+    /// 100 %. Above 80 % the charger tapers, modelled as the rate falling linearly to a fifth of itself at 100 % (that
+    /// stretch takes about twice what a straight line would); below 80 % nothing slows it. nil until there is a
+    /// measurement, and nil at or past the target.
+    static func chargeForecast(_ samples: [Sample], level: Double, now: Date, target: Int = 100) -> Forecast? {
+        let goal = Double(min(max(target, 1), 100))
+        guard level < goal else { return nil }
+        var wsum = 0.0, rsum = 0.0
+        for s in samples where now.timeIntervalSince(s.at) <= window {
+            guard let r = s.ratePerHour, r > 0 else { continue }
+            let w = exp(-now.timeIntervalSince(s.at) / chargeTau)
+            wsum += w
+            rsum += w * r
         }
-        let (live, trend) = liveAndTrend(samples, now: now)
-        guard let rate = trend ?? live, rate > 0 else { return nil }
-        let hours = min((100 - level) / rate, maxHours)
-        return Forecast(kind: .full, minutes: Int((hours * 60).rounded()), at: now.addingTimeInterval(hours * 3600), ratePerHour: rate)
+        guard wsum > 0 else { return nil }
+        var rate = rsum / wsum
+        if let trend = liveAndTrend(samples, now: now).trend, trend > 0 { rate = (2 * rate + trend) / 3 }
+        let hours = min(chargeHours(from: level, to: goal, rate: rate), maxHours)
+        return Forecast(kind: .full, minutes: Int((hours * 60).rounded()), at: now.addingTimeInterval(hours * 3600), ratePerHour: rate, target: Int(goal))
+    }
+
+    /// Hours from one level up to another at `rate` %/h: straight up to 80 %, then through the taper, where the rate
+    /// is rate · (1 − k·(level − 80)) with k = 0.8 / 20 — integrated exactly, so 80 → 100 takes ln 5 / (0.04 · rate).
+    static func chargeHours(from a: Double, to b: Double, rate: Double) -> Double {
+        guard rate > 0, b > a else { return 0 }
+        let straight = max(0, min(b, taperFrom) - a) / rate
+        let lo = max(a, taperFrom), hi = max(b, taperFrom)
+        guard hi > lo else { return straight }
+        let k = (1 - taperFloor) / (100 - taperFrom)
+        return straight + log((1 - k * (lo - taperFrom)) / (1 - k * (hi - taperFrom))) / (rate * k)
     }
 }
 

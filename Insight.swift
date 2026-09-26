@@ -13,6 +13,7 @@ import AppKit
         var ratePerHour: Double?     // positive
         var typicalRate: Double?     // the learned prior for this time of day, positive
         var topApps: [String]
+        var target = 100             // charging: the level it stops at — Apple's charge limit, else 100
     }
 
     @Published private(set) var text = ""
@@ -120,7 +121,7 @@ enum AppleIntelligence {
     static func factsLine(_ f: Insight.Facts) -> String {
         var parts = ["Battery \(f.percent)%."]
         if f.onAC { parts.append(f.full ? "Fully charged." : f.charging ? "Charging." : "On power, not charging.") }
-        if let m = f.minutesLeft { parts.append(f.onAC ? "Full in \(Format.duration(m))." : "Flat in \(Format.duration(m)).") }
+        if let m = f.minutesLeft { parts.append(f.onAC ? "\(f.target < 100 ? "\(f.target)%" : "Full") in \(Format.duration(m))." : "Flat in \(Format.duration(m)).") }
         if let r = f.ratePerHour { parts.append(String(format: f.onAC ? "Charging at %.0f%% per hour." : "Draining at %.0f%% per hour.", r)) }
         if let t = f.typicalRate, !f.onAC { parts.append(String(format: "Usual drain at this time of day: %.0f%% per hour.", t)) }
         if !f.topApps.isEmpty { parts.append("Apps using the most power: \(f.topApps.joined(separator: ", ")).") }

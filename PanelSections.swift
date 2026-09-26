@@ -438,6 +438,8 @@ struct ChargeLimitRows: View {
 
 extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+    /// The same words with no-break spaces, so a phrase like "70 W charger" wraps as one.
+    var nonBreaking: String { replacingOccurrences(of: " ", with: "\u{00A0}") }
 }
 
 /// The level over a chosen window: the line, the flash level dashed, the tone level shaded. Gaps (the Mac asleep)

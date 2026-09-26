@@ -181,9 +181,9 @@ enum Format {
     }
 
     /// The menu bar's spelled-out form, to the nearest five minutes: "2 Hours 10 Min Remaining", "1 Hour Remaining",
-    /// "45 Min Remaining", "Less Than 5 Min Remaining"; charging, "… Until Full".
-    static func words(_ minutes: Int, charging: Bool) -> String {
-        let suffix = charging ? "Until Full" : "Remaining"
+    /// "45 Min Remaining", "Less Than 5 Min Remaining"; charging, "… Until Full" — or "… Until 80%" when a charge limit is the goal.
+    static func words(_ minutes: Int, charging: Bool, goal: String = "Full") -> String {
+        let suffix = charging ? "Until \(goal)" : "Remaining"
         guard minutes >= 5 else { return "Less Than 5 Min \(suffix)" }
         let m = max(rounded5(minutes), 5)
         var parts: [String] = []

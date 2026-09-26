@@ -111,10 +111,40 @@ import SwiftUI
     let f = fresh.step(samples, now: at(10))
     check(f?.kind == .flat && near(Double(f?.minutes ?? 0), 75 * 2, 0.01), "75 % at 30 %/h → 150 min: \(String(describing: f?.minutes))")
     check(fresh.step([Sample(at: at(0), level: 50, ratePerHour: nil)], now: at(0)) == nil, "no opinion without data")
-    check(Learner.chargeForecast([], level: 50, now: at(0), osMinutes: 42)?.minutes == 42, "charging uses macOS's estimate")
+    check(Learner.chargeForecast([], level: 50, now: at(0)) == nil, "charging: nothing to go on, no forecast (never macOS's hour-plus figure)")
     var up: [Sample] = []
     for i in 0...10 { up.append(Sample(at: at(Double(i)), level: 50 + 20 * Double(i) / 60, ratePerHour: 20)) }
-    check(near(Double(Learner.chargeForecast(up, level: up.last!.level, now: at(10), osMinutes: nil)?.minutes ?? 0), (50 - 20.0 / 6) / 20 * 60, 0.02), "charging from the curve")
+    check(near(Double(Learner.chargeForecast(up, level: up.last!.level, now: at(10))?.minutes ?? 0), Learner.chargeHours(from: up.last!.level, to: 100, rate: 20) * 60, 0.02), "charging from the curve, through the taper")
+
+    // The trace of a 70 W charger into a pack held to 80 %: 43–48 W in (57–63 %/h on the gauge) from 70.5 % at plug-in,
+    // 75 % five minutes on, 80 % ten minutes on. Before: "1 Hour 10 Min Until Full" (macOS's figure, aimed at 100 %).
+    var trace: [Sample] = []
+    for i in 0...20 { trace.append(Sample(at: at(Double(i) * 0.5), level: 70.5 + Double(i) * 0.5, ratePerHour: [57, 63, 59, 61][i % 4])) }
+    let first = Learner.chargeForecast(Array(trace.prefix(2)), level: trace[1].level, now: trace[1].at, target: 80)
+    check((8...15).contains(first?.minutes ?? 0) && first?.target == 80, "71 % with 43–48 W in and an 80 % limit: 8–15 min to the limit, got \(String(describing: first?.minutes))")
+    check(Format.words(first!.minutes, charging: true, goal: first!.goalText) == "10 Min Until 80%", "worded as \(Format.words(first!.minutes, charging: true, goal: first!.goalText))")
+    check(Monitor.menuParts(.words, percent: 71, onAC: true, full: false, charging: true, minutes: first!.minutes, goal: first!.goalText).trailing == "10 Min Until 80%"
+          && Monitor.menuParts(.compact, percent: 71, onAC: true, full: false, charging: true, minutes: 18, goal: "80%").trailing == "80% 18m", "the menu bar aims at the limit")
+    let later = Learner.chargeForecast(Array(trace.prefix(11)), level: trace[10].level, now: trace[10].at, target: 80)
+    check((3...7).contains(later?.minutes ?? 0), "five minutes in, at 75.5 %: \(String(describing: later?.minutes)) min to go")
+    check(Learner.chargeForecast(trace, level: 80.5, now: trace.last!.at, target: 80) == nil, "at the limit: no countdown")
+    check(Learner.chargeForecast([Sample(at: at(0), level: 71, ratePerHour: nil)], level: 71, now: at(0), target: 80) == nil, "a sample without a measured rate is no measurement")
+    let toFull = Learner.chargeForecast(Array(trace.prefix(2)), level: trace[1].level, now: trace[1].at)
+    let straight = (100 - trace[1].level) / (toFull?.ratePerHour ?? 1) * 60
+    check(toFull?.target == 100 && Double(toFull?.minutes ?? 0) > straight * 1.4 && Double(toFull?.minutes ?? 0) < straight * 2.2,
+          "no limit: the taper makes 100 % \(String(describing: toFull?.minutes)) min away against \(Int(straight)) straight")
+    check(Format.words(toFull!.minutes, charging: true, goal: toFull!.goalText).hasSuffix("Until Full"), "no limit: Until Full")
+    check(near(Learner.chargeHours(from: 40, to: 80, rate: 60), 40.0 / 60, 0.001) && near(Learner.chargeHours(from: 71, to: 80, rate: 60), 9.0 / 60, 0.001), "below 80 % nothing slows the charge")
+    check(near(Learner.chargeHours(from: 80, to: 100, rate: 60), log(5) / (60 * 0.04), 0.001) && near(Learner.chargeHours(from: 90, to: 100, rate: 60), log(0.6 / 0.2) / (60 * 0.04), 0.001), "the taper's integral")
+    check(Monitor.fullNotice(full: false, onAC: true, charging: false, percent: 80, limit: 80) == "Held at 80%", "held at the limit: the header's line")
+
+    // On battery, a learned habit mustn't drag a fresh discharge: 8 %/h typical, 24 %/h measured → the forecast leans on the measurement.
+    var habit = Learner()
+    for _ in 0..<3 { habit.global.learn(8) }
+    var fresh24: [Sample] = []
+    for i in 0...2 { fresh24.append(Sample(at: at(Double(i) * 0.5), level: 60 - 24 * Double(i) * 0.5 / 60, ratePerHour: -24)) }
+    let early = habit.step(fresh24, now: at(1))
+    check(near(early?.ratePerHour ?? 0, 24, 0.25) && early?.learned == true, "a minute into a discharge the measured 24 %/h outweighs a typical 8 %/h: \(String(describing: early?.ratePerHour))")
 
     // Learning: a synthetic user who drains 12 %/h in the morning and 30 %/h in the evening, five weekdays.
     var cal = Calendar(identifier: .gregorian)

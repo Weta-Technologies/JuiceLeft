@@ -18,7 +18,7 @@ import SwiftUI
         defaults.removePersistentDomain(forName: suite)
         let now = Date(), source = NoSource()
         let flat = Forecast(kind: .flat, minutes: 190, at: now.addingTimeInterval(190 * 60), ratePerHour: 24, learned: true)
-        let full = Forecast(kind: .full, minutes: 55, at: now.addingTimeInterval(55 * 60), ratePerHour: 40)
+        let full = Forecast(kind: .full, minutes: 18, at: now.addingTimeInterval(18 * 60), ratePerHour: 60, target: 80)   // the sample limit is 80 %
         let low = Forecast(kind: .flat, minutes: 40, at: now.addingTimeInterval(40 * 60), ratePerHour: 27, learned: true)
         let limit = ChargeLimit.State(enabled: true, limit: 80, available: ChargeLimit.steps)
         let power = PowerMode.State(battery: .automatic, adapter: .automatic, highPowerSupported: true)

@@ -299,7 +299,7 @@ struct StatusHeader: View {
             HeaderGlyph(icon: monitor.icon, tint: tint)
             VStack(alignment: .leading, spacing: 2) {
                 Text(monitor.headline).font(.headline).lineLimit(1)
-                Text(monitor.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(monitor.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)   // "62% · 18 min to 80% · 70 W charger" wraps rather than trails off
             }
             .contentTransition(.opacity)
             .animation(reduceMotion ? nil : panelEase, value: monitor.headline + monitor.detail)
