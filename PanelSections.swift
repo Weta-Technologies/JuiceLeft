@@ -467,45 +467,59 @@ struct LevelChart: View {
         return ticks
     }
 
+    static let gutter: CGFloat = 28   // the Y labels live here, outside the plot, so no line ever crosses them
+
     var body: some View {
         VStack(spacing: 2) {
-            GeometryReader { geo in
-                let w = geo.size.width, h = geo.size.height
-                let from = now.addingTimeInterval(-hours * 3600)
-                let recent = points.filter { $0.t >= from }
-                let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (hours * 3600)) * w }
-                let y = { (l: Double) in h * CGFloat(1 - l / 100) }
-                ZStack(alignment: .bottomLeading) {
-                    RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.04))
-                    Rectangle().fill(Color.red.opacity(0.10)).frame(height: h * CGFloat(alertAt) / 100)
-                    Path { p in p.move(to: CGPoint(x: 0, y: y(50))); p.addLine(to: CGPoint(x: w, y: y(50))) }   // the 50 % hairline
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    Path { p in p.move(to: CGPoint(x: 0, y: y(Double(warnAt)))); p.addLine(to: CGPoint(x: w, y: y(Double(warnAt)))) }
-                        .stroke(Color.orange.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    ForEach([false, true], id: \.self) { charging in
-                        Path { p in
-                            var previous: History.Point?
-                            for point in recent where point.c == charging {
-                                let at = CGPoint(x: x(point.t), y: y(point.l))
-                                if let previous, point.t.timeIntervalSince(previous.t) < 5 * 60 { p.addLine(to: at) } else { p.move(to: at) }
-                                previous = point
+            HStack(alignment: .top, spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Text("100%").font(.caption2).foregroundStyle(.tertiary)
+                    Text("50%").font(.caption2).foregroundStyle(.tertiary).frame(maxHeight: .infinity, alignment: .center)   // centred on the hairline
+                }
+                .frame(width: Self.gutter, alignment: .trailing)
+                GeometryReader { geo in
+                    let w = geo.size.width, h = geo.size.height
+                    let from = now.addingTimeInterval(-hours * 3600)
+                    let recent = points.filter { $0.t >= from }
+                    let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (hours * 3600)) * w }
+                    let y = { (l: Double) in h * CGFloat(1 - l / 100) }
+                    ZStack(alignment: .bottomLeading) {
+                        RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.04))
+                        Rectangle().fill(Color.red.opacity(0.10)).frame(height: h * CGFloat(alertAt) / 100)
+                        Path { p in p.move(to: CGPoint(x: 0, y: y(50))); p.addLine(to: CGPoint(x: w, y: y(50))) }   // the 50 % hairline
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        Path { p in p.move(to: CGPoint(x: 0, y: y(Double(warnAt)))); p.addLine(to: CGPoint(x: w, y: y(Double(warnAt)))) }
+                            .stroke(Color.orange.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        ForEach([false, true], id: \.self) { charging in
+                            Path { p in
+                                var previous: History.Point?
+                                for point in recent where point.c == charging {
+                                    let at = CGPoint(x: x(point.t), y: y(point.l))
+                                    if let previous, point.t.timeIntervalSince(previous.t) < 5 * 60 { p.addLine(to: at) } else { p.move(to: at) }
+                                    previous = point
+                                }
                             }
+                            .stroke(charging ? Color.green : Color.accentColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                         }
-                        .stroke(charging ? Color.green : Color.accentColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                    }
-                    Text("100%").font(.caption2).foregroundStyle(.tertiary).position(x: 14, y: 6)
-                    Text("50%").font(.caption2).foregroundStyle(.tertiary).position(x: 12, y: y(50) - 6)
-                    if recent.count < 2 {
-                        Text("Not enough history yet").font(.caption2).foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if recent.count < 2 {
+                            Text("Not enough history yet").font(.caption2).foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
                 }
             }
-            GeometryReader { geo in   // the time labels: fixed height, so the card never moves
-                let w = geo.size.width
-                ForEach(Array(Self.ticks(now: now, hours: hours).enumerated()), id: \.offset) { _, tick in
-                    Text(tick.text).font(.caption2).foregroundStyle(.tertiary).fixedSize()
-                        .position(x: tick.fraction <= 0 ? 12 : tick.fraction >= 1 ? w - 12 : min(max(tick.fraction * w, 12), w - 12), y: Self.labelHeight / 2)
+            HStack(spacing: 4) {   // the time labels, under the plot (not the gutter): fixed height, so the card never moves
+                Color.clear.frame(width: Self.gutter, height: Self.labelHeight)
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    ZStack {
+                        ForEach(Array(Self.ticks(now: now, hours: hours).enumerated()), id: \.offset) { _, tick in
+                            let label = Text(tick.text).font(.caption2).foregroundStyle(.tertiary).fixedSize()
+                            if tick.fraction <= 0 { HStack(spacing: 0) { label; Spacer(minLength: 0) } }             // flush with the plot's left edge
+                            else if tick.fraction >= 1 { HStack(spacing: 0) { Spacer(minLength: 0); label } }        // "Now" flush with its right edge
+                            else { label.position(x: min(max(tick.fraction * w, 16), w - 16), y: Self.labelHeight / 2) }
+                        }
+                    }
                 }
             }
             .frame(height: Self.labelHeight)
