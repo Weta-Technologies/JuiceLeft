@@ -22,6 +22,7 @@ JuiceLeft is developed and published by Weta Technologies Limited ([CyborgFinger
 - The power-use list reads which of your apps are using the processor while the panel is open; it is shown, never stored or sent.
 - The *Your devices* card reads the battery level and name of your Bluetooth mice, keyboards and trackpads from macOS; they are shown, never stored or sent, and no Bluetooth permission is needed.
 - `juiceleft://` links accept only JuiceLeft's own commands; nothing is stored or returned.
+- To make room when the menu bar is full, JuiceLeft checks where the menu-bar icons sit (their positions only — never their names or contents); nothing is stored or sent.
 
 This data never leaves your Mac. You can delete it at any time (see the README's Uninstall section).
 
