@@ -213,6 +213,33 @@ struct History: Codable, Equatable {
         }
     }
 
+    /// --shots: sample state for the panel — no readings, no observers, nothing on the Mac touched.
+    init(shots s: Settings, reading r: Reading, forecast: Forecast?, phase: Alerts.Phase = .clear, history: History = History(), helperReady: Bool = true,
+         aiStatus: AppleIntelligence.Status = .available, welcome: Bool = false, tips: [Tip] = [], ranking: Ranking = Ranking(),
+         chargeLimit: ChargeLimit.State? = nil, power: PowerMode.State = PowerMode.State(), defaults: UserDefaults, source: BatterySource) {
+        self.source = source
+        self.defaults = defaults
+        historyURL = FileManager.default.temporaryDirectory.appendingPathComponent("juiceleft-shots-history.json")
+        hardware = FakeHardware()
+        self.s = s
+        aiNudgeDismissed = false
+        self.history = history
+        reading = r
+        self.forecast = forecast
+        self.phase = phase
+        self.helperReady = helperReady
+        self.aiStatus = aiStatus
+        self.welcome = welcome
+        self.tips = tips
+        self.chargeLimit = chargeLimit
+        self.power = power
+        if let forecast { _ = steady.update(forecast.minutes) }
+        energy.show(sample: ranking)
+        insight.update(facts, ai: false)
+        let parts = Self.menuParts(s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full, charging: r.charging, minutes: forecast?.minutes)
+        icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
+    }
+
     func start() {
         if interactive, helperStale {   // an app update changed the helper: the installed one takes the signed files itself
             helperUpdating = true
@@ -670,7 +697,7 @@ struct History: Codable, Equatable {
             if r.charging { return forecast.map { "Full around \(Format.clock($0.at))" } ?? "Charging" }
             return "On power, not charging"
         }
-        return forecast.map { "Flat around \(Format.clock($0.at))" } ?? "Working out the time to flat…"
+        return forecast.map { "Flat around \(Format.clock($0.at))" } ?? "Estimating time to flat…"
     }
 
     /// The panel header's second line.
@@ -680,7 +707,7 @@ struct History: Codable, Equatable {
         if let f = forecast {
             parts.append(f.kind == .flat ? "\(Format.duration(f.minutes)) left" : "\(Format.duration(f.minutes)) to full")
         } else if !r.onAC, let os = r.osMinutesLeft {
-            parts.append("macOS guesses \(Format.duration(os))")
+            parts.append("macOS says \(Format.duration(os))")
         }
         if r.onAC, let w = r.adapterWatts { parts.append("\(w) W charger") }
         else if let w = r.batteryWatts, w < 0 { parts.append(Format.watts(w)) }

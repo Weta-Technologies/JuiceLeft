@@ -55,6 +55,9 @@ struct Ranking: Equatable {
         previous = [:]
     }
 
+    /// --shots: a sample ranking in place of a measurement.
+    func show(sample: Ranking) { ranking = sample }
+
     private func sample() {
         let before = previous, beforeAt = previousAt
         for (id, _) in quitting where Self.runningApp(id) == nil { quitting[id] = nil }   // gone: the row goes with it

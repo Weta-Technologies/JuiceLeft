@@ -10,6 +10,7 @@ import SwiftUI
 
     init() {
         if CommandLine.arguments.contains("--selftest") { selfTest() }
+        if let i = CommandLine.arguments.firstIndex(of: "--shots"), i + 1 < CommandLine.arguments.count { Shots.run(dir: CommandLine.arguments[i + 1]) }
     }
 
     var body: some Scene {
