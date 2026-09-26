@@ -7,6 +7,7 @@ struct AppEnergy: Identifiable, Equatable {
     let bundle: String?      // the .app, if it is one
     let cpuPercent: Double   // CPU seconds per second × 100, so one busy core is 100 (the tooltip's figure)
     let share: Double        // 0…1 of all the processor time measured, the number shown
+    var icon: NSImage? = nil // only --shots sets one: a drawn sample icon, since its apps don't exist
 }
 
 /// What the panel lists: the user's apps using noticeable power, most first, and everything else rolled up.
@@ -191,6 +192,7 @@ struct Ranking: Equatable {
     /// Cached app icons, for the rows.
     private static var icons: [String: NSImage] = [:]
     static func icon(for app: AppEnergy) -> NSImage {
+        if let icon = app.icon { return icon }
         if let cached = icons[app.id] { return cached }
         let image = app.bundle.map { NSWorkspace.shared.icon(forFile: $0) }
             ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: nil) ?? NSImage()

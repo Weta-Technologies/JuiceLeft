@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-/// The batteries of the Bluetooth accessories paired with this Mac — a Magic Mouse, Keyboard or Trackpad — read
+/// The batteries of the Bluetooth accessories paired with this Mac — a wireless mouse, keyboard or trackpad — read
 /// straight from the IORegistry (the `AppleDeviceManagementHIDEventService` entries expose `BatteryPercent`). No
 /// permission, no private Bluetooth APIs, nothing stored: read live for the panel and, if the user asks, to warn
 /// when one runs low. AirPods and other audio devices don't publish a level here, so they aren't listed.

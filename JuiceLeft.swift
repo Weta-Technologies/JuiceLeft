@@ -43,7 +43,7 @@ import SwiftUI
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Shortcuts and scripts drive JuiceLeft through its `juiceleft://` scheme; only the whitelisted actions run.
+    /// The user's own shortcuts and scripts drive JuiceLeft through its `juiceleft://` scheme; only the whitelisted actions run.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls { if let action = URLAction.parse(url) { monitor?.handle(action) } }
     }
@@ -194,9 +194,9 @@ import SwiftUI
     check(!EnergyMeter.rank(before: before, after: idle, seconds: 3, apps: userApps, pinned: ["/Applications/Example Browser.app"]).apps.isEmpty, "ranking: a quitting app stays pinned")
     check(EnergyMeter.rank(before: before, after: before, seconds: 3, apps: userApps) == Ranking(), "ranking: nothing used, nothing listed")
     check(EnergyMeter.isUserApp(bundle: "/Applications/SleepLess.app", bundleID: "io.github.cyborgfingers.sleepless", policy: .accessory), "a menu-bar app counts as the user's")
-    check(!EnergyMeter.isUserApp(bundle: "/System/Library/CoreServices/Spotlight.app", bundleID: "com.apple.Spotlight", policy: .accessory), "Spotlight is background")
-    check(EnergyMeter.mayQuit(bundle: "/Applications/Safari.app", bundleID: "com.apple.Safari", policy: .regular, isSelf: false), "Safari may quit")
-    check(!EnergyMeter.mayQuit(bundle: "/System/Library/CoreServices/Finder.app", bundleID: "com.apple.finder", policy: .regular, isSelf: false), "not Finder")
+    check(!EnergyMeter.isUserApp(bundle: "/System/Library/CoreServices/SystemAgent.app", bundleID: "com.apple.systemagent", policy: .accessory), "a system agent is background")
+    check(EnergyMeter.mayQuit(bundle: "/Applications/Example Browser.app", bundleID: "com.example.browser", policy: .regular, isSelf: false), "a user app may quit")
+    check(!EnergyMeter.mayQuit(bundle: "/System/Library/CoreServices/SystemApp.app", bundleID: "com.apple.loginwindow", policy: .regular, isSelf: false), "not a system app")
     check(!EnergyMeter.mayQuit(bundle: "/System/Library/CoreServices/ControlCenter.app", bundleID: "com.apple.controlcenter", policy: .accessory, isSelf: false), "not Control Center")
     check(!EnergyMeter.mayQuit(bundle: "/Applications/JuiceLeft.app", bundleID: "io.github.cyborgfingers.juiceleft", policy: .accessory, isSelf: true), "not itself")
     check(!EnergyMeter.mayQuit(bundle: nil, bundleID: nil, policy: .regular, isSelf: false), "not a bare process")
@@ -407,13 +407,13 @@ import SwiftUI
           && zip(dayNames, dayNames.dropFirst()).allSatisfy { $0.fraction < $1.fraction }, "three days' ticks: \(dayNames)")
 
     // Accessory batteries: a Bluetooth mouse parses; a wired or level-less entry doesn't; the name gives the kind.
-    check(AccessoryBattery.parse(["BatteryPercent": 55, "Product": "Magic Mouse", "Transport": "Bluetooth", "DeviceAddress": "aa:bb"]) == AccessoryBattery.Device(id: "aa:bb", name: "Magic Mouse", percent: 55, kind: .mouse), "mouse parses")
-    check(AccessoryBattery.parse(["BatteryPercent": 80, "Product": "Magic Keyboard", "Transport": "USB"]) == nil, "wired accessory skipped")
-    check(AccessoryBattery.parse(["Product": "Magic Trackpad", "Transport": "Bluetooth"]) == nil && AccessoryBattery.parse(["BatteryPercent": 0, "Product": "Magic Mouse"]) == nil, "no level, no device")
-    check(AccessoryBattery.kind(for: "Office Magic Trackpad") == .trackpad && AccessoryBattery.kind(for: "Office Keyboard") == .keyboard && AccessoryBattery.kind(for: "Studio Display") == .other, "kinds")
+    check(AccessoryBattery.parse(["BatteryPercent": 55, "Product": "Wireless Mouse", "Transport": "Bluetooth", "DeviceAddress": "aa:bb"]) == AccessoryBattery.Device(id: "aa:bb", name: "Wireless Mouse", percent: 55, kind: .mouse), "mouse parses")
+    check(AccessoryBattery.parse(["BatteryPercent": 80, "Product": "Wireless Keyboard", "Transport": "USB"]) == nil, "wired accessory skipped")
+    check(AccessoryBattery.parse(["Product": "Wireless Trackpad", "Transport": "Bluetooth"]) == nil && AccessoryBattery.parse(["BatteryPercent": 0, "Product": "Wireless Mouse"]) == nil, "no level, no device")
+    check(AccessoryBattery.kind(for: "Office Trackpad") == .trackpad && AccessoryBattery.kind(for: "Office Keyboard") == .keyboard && AccessoryBattery.kind(for: "Desk Display") == .other, "kinds")
 
     // The low-accessory latch fires once, clears with hysteresis, and forgets a device that goes away.
-    let mouse = { (p: Int) in AccessoryBattery.Device(id: "m", name: "Magic Mouse", percent: p, kind: .mouse) }
+    let mouse = { (p: Int) in AccessoryBattery.Device(id: "m", name: "Wireless Mouse", percent: p, kind: .mouse) }
     var da = DeviceAlerts()
     check(da.due([mouse(20)], level: 15).isEmpty, "20% at a 15% level: quiet")
     check(da.due([mouse(15)], level: 15).map(\.id) == ["m"] && da.due([mouse(14)], level: 15).isEmpty, "15%: one warning, no repeat")

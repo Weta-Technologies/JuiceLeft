@@ -1,6 +1,6 @@
 import Foundation
 
-/// The `juiceleft://` URL scheme, for Shortcuts and scripts. A tight whitelist: the host names the command, and the
+/// The `juiceleft://` URL scheme, for the user's own shortcuts and scripts. A tight whitelist: the host names the command, and the
 /// only accepted query is a single validated on/off or mode. Anything else — an unknown host, a stray parameter, a
 /// bad value — parses to nil and does nothing. Pure, so --selftest can throw hostile input at it.
 enum URLAction: Equatable {

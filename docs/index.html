@@ -169,7 +169,7 @@
       <div class="card"><div class="icon">❤️‍🩹</div><h3>Battery health, and a coach</h3><p>Apple's own health figure as the headline, then condition, cycles, the capacities, temperature, voltage, charger watts, watts in or out, total draw, macOS's estimate for comparison — and how much of the last three days the battery sat full, cycles per week, the health trend, and a one-tap <em>Set 80%</em>.</p></div>
       <div class="card"><div class="icon">📈</div><h3>History</h3><p>The level over the last 12 hours, 24 hours or 3 days — blue on battery, green charging, the warning level dashed, a gap where the Mac slept — and the window in one line: <em>100% → 84% · about 8%/h on battery</em>. Three days, a point a minute, kept on your Mac.</p></div>
       <div class="card"><div class="icon">🖱️</div><h3>Your devices</h3><p>The batteries of the Bluetooth mice, keyboards and trackpads connected to the Mac, read from macOS itself — no permission, nothing installed — and, if you turn it on, a notification when one gets low, at the level you pick, once per charge.</p></div>
-      <div class="card"><div class="icon">🔗</div><h3>Shortcuts and scripts</h3><p>A <code>juiceleft://</code> link runs a panel action: <code>savebattery?on=1</code>, <code>mode?set=low</code>, <code>topup</code>, <code>monitoring?on=0</code>, <code>snooze</code>. Five commands, every parameter checked, nothing else accepted — bind one to a Shortcut or a hotkey.</p></div>
+      <div class="card"><div class="icon">🔗</div><h3>Your shortcuts and scripts</h3><p>A <code>juiceleft://</code> link runs a panel action: <code>savebattery?on=1</code>, <code>mode?set=low</code>, <code>topup</code>, <code>monitoring?on=0</code>, <code>snooze</code>. Five commands, every parameter checked, nothing else accepted — bind one to a shortcut of your own or a hotkey.</p></div>
       <div class="card"><div class="icon">✨</div><h3>A plain-English line</h3><p><em>“Draining at 14 % an hour, easier than your usual 20 % for this time of day.”</em> On macOS 26 with Apple Intelligence on, the on-device model phrases it — and every number is checked against JuiceLeft's own, so it can never invent one. Optional; the template stands everywhere else.</p></div>
       <div class="card"><div class="icon">🧘</div><h3>Quiet by design</h3><p>Samples the battery every 30 s and only draws when something changes; the app list and the tips only run while the panel is open. No Dock icon, no analytics, no network beyond a daily update check. Launch at login, and the menu bar showing the icon, the percent, the compact time or the words — and, if you like, the power draw (<em>−12 W</em>).</p></div>
     </div>
@@ -228,7 +228,7 @@
       <li>Apple's battery icon disappears and JuiceLeft's item takes its spot, with the time left after it. It asks once whether it may post notifications; say no and the pulse and the tone still work.</li>
     </ol>
     <h3 style="margin-top: 28px">Or build it from source</h3>
-    <p class="muted">A few seconds with Xcode or the Command Line Tools (<code>xcode-select --install</code>):</p>
+    <p class="muted">A few seconds with Apple's command-line developer tools (<code>xcode-select --install</code>):</p>
 <pre><code>git clone https://github.com/Weta-Technologies/JuiceLeft.git
 cd JuiceLeft
 ./build.sh install</code></pre>

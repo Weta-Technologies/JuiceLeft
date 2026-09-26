@@ -198,7 +198,7 @@ enum Tips {
     }
 }
 
-/// A weak charger: below this the charge is slow for any Mac (a phone or iPad brick), and worth a quiet word. A
+/// A weak charger: below this the charge is slow for any Mac (a phone or tablet brick), and worth a quiet word. A
 /// 30 W-and-up adapter can charge a MacBook Air at full speed, so it isn't flagged.
 enum ChargerAdvice {
     static let slowWatts = 30

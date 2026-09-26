@@ -29,7 +29,7 @@ import SwiftUI
         var shortcut = Settings()
         shortcut.hotKey = HotKey.Spec(keyCode: 38, key: "J", modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue)
         let dim = Tip(id: "brightness", text: "Screen at 85%: dim to 40%", gain: 41, estimated: true, fix: .dim(to: 0.4))
-        let hog = Tip(id: "app", text: "Safari is working hard: 62% of a core", gain: 25, estimated: true, fix: .quit(app: "Safari"))
+        let hog = Tip(id: "app", text: "Web Browser is working hard: 62% of a core", gain: 25, estimated: true, fix: .quit(app: "Web Browser"))
         let lowPower = Tip(id: "lowpower", text: "Under 30% with Low Power off", gain: 22, estimated: true, fix: .lowPower)
         let states: [(name: String, monitor: Monitor, expanded: [String], hours: Int)] = [
             ("setup", Monitor(shots: Settings(), reading: reading(percent: 84, onAC: false, at: now), forecast: nil, helperReady: false, aiStatus: .notEnabled,
@@ -108,15 +108,37 @@ import SwiftUI
         return h
     }
 
-    private static let devices = [AccessoryBattery.Device(id: "trackpad", name: "Magic Trackpad", percent: 12, kind: .trackpad),
-                                  AccessoryBattery.Device(id: "mouse", name: "Magic Mouse", percent: 47, kind: .mouse),
-                                  AccessoryBattery.Device(id: "keyboard", name: "Magic Keyboard", percent: 88, kind: .keyboard)]
+    private static func sample(_ name: String, symbol: String, from: (CGFloat, CGFloat, CGFloat), to: (CGFloat, CGFloat, CGFloat),
+                               cpuPercent: Double, share: Double) -> AppEnergy {
+        let symbolImage = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)) ?? NSImage()
+        let white = symbolImage.copy() as! NSImage   // the symbol as a white shape
+        white.lockFocus()
+        NSColor.white.set()
+        NSRect(origin: .zero, size: white.size).fill(using: .sourceAtop)
+        white.unlockFocus()
+        let icon = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { rect in
+            let tile = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
+            NSGradient(starting: NSColor(red: from.0, green: from.1, blue: from.2, alpha: 1), ending: NSColor(red: to.0, green: to.1, blue: to.2, alpha: 1))?.draw(in: tile, angle: -90)
+            white.draw(in: NSRect(x: (rect.width - white.size.width) / 2, y: (rect.height - white.size.height) / 2, width: white.size.width, height: white.size.height))
+            return true
+        }
+        var app = AppEnergy(id: "/Applications/\(name).app", name: name, bundle: "/Applications/\(name).app", cpuPercent: cpuPercent, share: share)
+        app.icon = icon
+        return app
+    }
 
+    private static let devices = [AccessoryBattery.Device(id: "trackpad", name: "Trackpad", percent: 12, kind: .trackpad),
+                                  AccessoryBattery.Device(id: "mouse", name: "Mouse", percent: 47, kind: .mouse),
+                                  AccessoryBattery.Device(id: "keyboard", name: "Keyboard", percent: 88, kind: .keyboard)]
+
+    /// Made-up apps, since a screenshot can't show anyone's real ones: each with an icon drawn here — a white symbol
+    /// on a rounded gradient tile, the way app icons read at this size.
     private static let ranking = Ranking(
-        apps: [AppEnergy(id: "/Applications/Safari.app", name: "Safari", bundle: "/Applications/Safari.app", cpuPercent: 62, share: 0.34),
-               AppEnergy(id: "/System/Applications/Music.app", name: "Music", bundle: "/System/Applications/Music.app", cpuPercent: 21, share: 0.12),
-               AppEnergy(id: "/System/Applications/Mail.app", name: "Mail", bundle: "/System/Applications/Mail.app", cpuPercent: 11, share: 0.06),
-               AppEnergy(id: "/System/Applications/Utilities/Terminal.app", name: "Terminal", bundle: "/System/Applications/Utilities/Terminal.app", cpuPercent: 5, share: 0.03)],
+        apps: [sample("Web Browser", symbol: "globe", from: (0.20, 0.55, 1.0), to: (0.05, 0.35, 0.85), cpuPercent: 62, share: 0.34),
+               sample("Video Call", symbol: "video.fill", from: (0.35, 0.80, 0.45), to: (0.10, 0.60, 0.30), cpuPercent: 21, share: 0.12),
+               sample("Photo Editor", symbol: "photo.fill", from: (1.0, 0.60, 0.30), to: (0.90, 0.35, 0.40), cpuPercent: 11, share: 0.06),
+               sample("Code Builder", symbol: "hammer.fill", from: (0.45, 0.45, 0.50), to: (0.25, 0.25, 0.30), cpuPercent: 5, share: 0.03)],
         background: [AppEnergy(id: "WindowServer", name: "WindowServer", bundle: nil, cpuPercent: 30, share: 0.16),
                      AppEnergy(id: "kernel_task", name: "kernel_task", bundle: nil, cpuPercent: 14, share: 0.08)],
         backgroundShare: 0.45)

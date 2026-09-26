@@ -125,8 +125,8 @@ struct EnergyCard: View {
                                                         configuration: NSWorkspace.OpenConfiguration())
                  } label: { Image(systemName: "chart.bar.xaxis").foregroundStyle(.secondary) }
                      .buttonStyle(.plain)
-                     .help("Open Activity Monitor for the full picture, including system processes.")
-                     .accessibilityLabel("Open Activity Monitor")
+                     .help("Open macOS's own process monitor for the full picture, including system processes.")
+                     .accessibilityLabel("Open the system process monitor")
              }) {
             if measured {
                 Divider()
@@ -747,8 +747,8 @@ struct GeneralRows: View {
                           help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)
             }
             HStack(spacing: 6) {
-                Text("Shortcuts and scripts: juiceleft:// links.").font(.caption).foregroundStyle(.secondary)
-                    .help("Open one of these from Shortcuts, a script or the Terminal:\njuiceleft://savebattery?on=1 (on=0 undoes)\njuiceleft://mode?set=low | automatic | high\njuiceleft://topup (charge to full once)\njuiceleft://monitoring?on=0\njuiceleft://snooze\nNothing else is accepted.")
+                Text("Your shortcuts and scripts: juiceleft:// links.").font(.caption).foregroundStyle(.secondary)
+                    .help("Open one of these from a shortcut of your own, a script or the command line:\njuiceleft://savebattery?on=1 (on=0 undoes)\njuiceleft://mode?set=low | automatic | high\njuiceleft://topup (charge to full once)\njuiceleft://monitoring?on=0\njuiceleft://snooze\nNothing else is accepted.")
                 Spacer(minLength: 0)
                 Button("Reinstall helper…") { monitor.setUpHelper() }
                     .buttonStyle(.link).font(.caption)

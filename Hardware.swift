@@ -134,7 +134,7 @@ enum AmbientLight {
 enum USBPower {
     struct Device: Equatable { var name: String; var milliamps: Int }
 
-    /// Pure: one registry entry's properties → a device, or nil for Apple's built-in ones and the unnamed.
+    /// Pure: one registry entry's properties → a device, or nil for the Mac's own built-in parts (matched by the names they report over USB) and the unnamed.
     static func parse(_ p: [String: Any]) -> Device? {
         guard let name = (p["USB Product Name"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
         if (p["Built-In"] as? Bool) == true { return nil }

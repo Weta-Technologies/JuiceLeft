@@ -333,7 +333,7 @@ struct History: Codable, Equatable {
 
     func testTone() { tone.play(s.tone, volume: s.volume) }
 
-    /// A validated `juiceleft://` action, from Shortcuts or a script. Each maps onto a normal user action, with the
+    /// A validated `juiceleft://` action, from one of the user's shortcuts or a script. Each maps onto a normal user action, with the
     /// same guards (Save Battery only on battery, energy modes only with the helper, and so on).
     func handle(_ action: URLAction) {
         log?("url action \(action)")
