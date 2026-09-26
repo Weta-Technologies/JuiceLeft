@@ -630,13 +630,14 @@ struct UpdateRows: View {
 
     private var checking: Bool { if case .checking = updater.state { return true }; return false }
 
-    private var status: String? {
+    /// Always one line, so the row (and the popover around it) never changes height while a check runs.
+    private var status: String {
+        let ago = updater.lastChecked.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) }
         switch updater.state {
-        case .upToDate:
-            let when = updater.lastChecked.map { " · checked \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))" } ?? ""
-            return "\(updater.appName) \(updater.currentVersion.description) is up to date\(when)."
+        case .checking: return "Checking for updates…"
+        case .upToDate: return "\(updater.appName) \(updater.currentVersion.description) is up to date\(ago.map { " · checked \($0)" } ?? "")."
         case .failed(.none, let message): return message
-        default: return nil
+        default: return ago.map { "Last checked \($0)." } ?? "Not checked yet."
         }
     }
 
@@ -647,14 +648,12 @@ struct UpdateRows: View {
                     .toggleStyle(.checkbox)
                     .help("About once a day, \(updater.appName) asks GitHub whether a newer release exists — a plain web request, nothing about you or your Mac. Updates are only installed when you click Update Now.")
                 Spacer()
-                Button(checking ? "Checking…" : "Check Now") { updater.check(manual: true) }
+                Button("Check Now") { updater.check(manual: true) }   // one label: a width change would reflow the row
                     .disabled(checking)
                     .help("Ask GitHub now whether a newer \(updater.appName) exists.")
             }
             .font(.callout)
-            if let status {
-                Text(status).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+            Text(status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(status)
         }
     }
 }
