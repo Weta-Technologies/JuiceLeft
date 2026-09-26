@@ -685,7 +685,7 @@ struct GeneralRows: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Keyboard shortcut").font(.callout)
-                    Text(monitor.s.hotKey.map { "\($0.label) opens the panel, from any app" } ?? "Opens the panel from any app")
+                    Text(monitor.s.hotKey.map { "\($0.label), from any app" } ?? "Opens the panel from any app")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 6)
