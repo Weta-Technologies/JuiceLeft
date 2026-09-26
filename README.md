@@ -266,6 +266,5 @@ JuiceLeft is **freeware**: you may download and use it free of charge on any Mac
 - [Privacy policy](PRIVACY.md): JuiceLeft collects nothing, and its Apple Intelligence tips run on your Mac
 - [Trademark policy](TRADEMARKS.md) · [Security policy](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Notices](NOTICE.md)
 
-JuiceLeft 1.0.0 and the source published before 26 September 2026 were released under the GNU AGPL-3.0; copies of that version keep that licence.
 
 Apple, Mac, macOS, MagSafe and Apple Intelligence are trademarks of Apple Inc. JuiceLeft is not affiliated with or endorsed by Apple Inc.

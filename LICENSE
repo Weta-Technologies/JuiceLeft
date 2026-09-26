@@ -121,12 +121,7 @@ the rest of the agreement will remain in effect. A failure or delay in enforcing
 may not assign or transfer this agreement; Weta Technologies may. This agreement is the entire agreement between you
 and Weta Technologies about the Software and supersedes any earlier terms for this version.
 
-19. EARLIER VERSIONS
-JuiceLeft 1.0.0 and the source published before 26 September 2026 were distributed under the GNU Affero General Public
-License v3.0. Anyone who received that version keeps the rights that licence gave for it. This agreement applies to
-every later version.
-
-20. CONTACT
+19. CONTACT
 Questions about this agreement: open an issue at https://github.com/Weta-Technologies/JuiceLeft/issues
 Security reports: see SECURITY.md.
 

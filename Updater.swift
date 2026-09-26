@@ -190,7 +190,7 @@ import UserNotifications
         }
         lastChecked = Date()
         defaults.set(lastChecked, forKey: "updates.lastChecked")
-        // A release without the zip + signature (the 1.0 DMG-only ones) is nothing this app can update to.
+        // A release without the zip + signature (a DMG-only one) is nothing this app can update to.
         guard let release = Self.parse(feed: body, appName: appName), release.version > currentVersion,
               manual || release.tag != defaults.string(forKey: "updates.skipped") else {
             log("up to date at \(currentVersion)")
