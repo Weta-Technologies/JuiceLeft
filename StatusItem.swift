@@ -87,7 +87,7 @@ import SwiftUI
     private var roomRetry: Timer?
 
     /// Pushed off the screen (or given no width) = squeezed out; the compact form goes up in its place. Occlusion is
-    /// deliberately not a signal: a menu-bar organiser's overlay (Bartender) covers the item without hiding it.
+    /// deliberately not a signal: a menu-bar organiser's overlay covers the item without hiding it.
     private func checkRoom() {
         guard let window = item.button?.window, let screen = NSScreen.main else { return }
         let onScreen = screen.frame.intersects(window.frame) && window.frame.width > 1

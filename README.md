@@ -161,7 +161,7 @@ cd JuiceLeft
 - The forecast needs a few minutes of discharge before it has an opinion (*Estimating…* until then), and a couple of full discharges before it can tell you how accurate it is.
 - Installed with the package, the helper behind energy modes and the charging light is already set up — the installer's prompt was the one. Built from source, the panel opens with a **one-time setup** card instead: **Set up now** brings one macOS prompt — your password, or Touch ID on Macs that have it — and nothing asks again; **Later** leaves those features off (each with its own *Set up…* button; *Smart Low Power* waits too, and says so under its switch) until you are ready. A *Reinstall helper…* link at the bottom of the panel is there if the helper is ever removed.
 - On a Mac that could run **Apple Intelligence** but has it turned off, the panel also offers one line — *Turn on Apple Intelligence for plain-English battery tips* — with **Open Settings** (System Settings › Apple Intelligence & Siri) and **Not now**. JuiceLeft starts phrasing its summary line with it as soon as it is on; Macs that can't run it, and macOS before 26, never see the line.
-- If you use **Bartender**, **Ice** or a similar menu-bar organiser, or your menu bar is crowded next to the notch, the item may be hidden — look for it there.
+- If you use a menu-bar organiser, or your menu bar is crowded next to the notch, the item may be hidden — look for it there.
 
 ## Usage
 
