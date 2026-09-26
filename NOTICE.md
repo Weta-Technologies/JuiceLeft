@@ -4,8 +4,6 @@ JuiceLeft is copyright (c) 2026 Weta Technologies Limited. All rights reserved. 
 
 ## Acknowledgements
 
-- The way JuiceLeft sets Apple's charge limit was informed by the public discussion in **actuallymentor/battery** (pull request #480); no code from it is included.
-- The MagSafe light values were learned from the public documentation of **PhoSignal** and **magsafe-dark**; no code from either is included.
 - Battery-care guidance follows Apple's published advice on maximising battery life and lifespan.
 - Built with Apple's system frameworks (AppKit, SwiftUI, IOKit, and FoundationModels where available).
 
