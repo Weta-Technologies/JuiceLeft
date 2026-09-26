@@ -31,7 +31,7 @@ import AppKit
 
     func update(_ f: Facts, ai: Bool) {
         lastFacts = f
-        let signature = Self.signature(f)
+        let signature = Self.signature(f, ai: ai)
         guard signature != self.signature else { return }
         self.signature = signature
         text = Self.template(f)
@@ -54,10 +54,11 @@ import AppKit
         return "usual"
     }
 
-    /// What the sentence hangs on; when this changes, new words.
-    static func signature(_ f: Facts) -> String {
+    /// What the sentence hangs on; when this changes, new words. The wording switch too: turning it on phrases
+    /// the line now, turning it off puts the template straight back.
+    static func signature(_ f: Facts, ai: Bool) -> String {
         [f.onAC ? "ac" : "batt", f.charging ? "chg" : "", f.full ? "full" : "", pace(f) ?? "-",
-         f.minutesLeft.map { "\($0 / 30)" } ?? "?", f.ratePerHour.map { "\(Int($0))" } ?? "?", f.topApps.joined(separator: ",")].joined(separator: "|")
+         f.minutesLeft.map { "\($0 / 30)" } ?? "?", f.ratePerHour.map { "\(Int($0))" } ?? "?", f.topApps.joined(separator: ","), ai ? "ai" : ""].joined(separator: "|")
     }
 
     static func template(_ f: Facts) -> String {

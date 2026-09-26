@@ -243,6 +243,7 @@ import SwiftUI
     check(!AppleIntelligence.keepsNumbers("About 3 hours left.", facts: "Battery 34%. Flat in 2 h 50 min."), "invented number caught")
     let facts = Insight.Facts(percent: 34, onAC: false, charging: false, full: false, minutesLeft: 170, ratePerHour: 12, typicalRate: 9, topApps: ["Example Browser"])
     check(Insight.template(facts).contains("faster") && Insight.template(facts).contains("Example Browser"), "template: \(Insight.template(facts))")
+    check(Insight.signature(facts, ai: true) != Insight.signature(facts, ai: false), "the wording switch alone is worth new words, both ways")
 
     // The menu bar's words and text parts, per display style.
     check(Format.words(130, charging: false) == "2 Hours 10 Min Remaining" && Format.words(120, charging: false) == "2 Hours Remaining", "words: hours")
