@@ -102,7 +102,22 @@ struct ShortcutRecorder: NSViewRepresentable {
 final class RecorderButton: NSButton {
     var spec: HotKey.Spec? { didSet { if spec != oldValue { refresh() } } }
     var onChange: ((HotKey.Spec?) -> Void)?
-    private var recording = false { didSet { HotKey.recording = recording; refresh() } }
+    private var keys: Any?   // while recording, every key press comes here first — ahead of ⌘Q and the panel's Esc
+    private var recording = false {
+        didSet {
+            HotKey.recording = recording
+            refresh()
+            if recording, keys == nil {
+                keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                    MainActor.assumeIsolated { self?.took(event) }
+                    return nil
+                }
+            } else if !recording, let keys {
+                NSEvent.removeMonitor(keys)
+                self.keys = nil
+            }
+        }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -118,25 +133,27 @@ final class RecorderButton: NSButton {
 
     @available(*, unavailable) required init?(coder: NSCoder) { nil }
 
+    deinit {
+        if let keys { NSEvent.removeMonitor(keys) }
+        NotificationCenter.default.removeObserver(self)
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override var intrinsicContentSize: NSSize { NSSize(width: 128, height: super.intrinsicContentSize.height) }   // one width for every title: nothing shifts
     override func resignFirstResponder() -> Bool { recording = false; return super.resignFirstResponder() }
+
+    /// The panel closing (or another app coming to the front) ends a recording.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self)
+        if let window { NotificationCenter.default.addObserver(self, selector: #selector(stopRecording), name: NSWindow.didResignKeyNotification, object: window) }
+    }
 
     @objc private func clicked() {
         if recording { stop() } else { recording = true; window?.makeFirstResponder(self) }
     }
 
-    /// ⌘-combinations are taken here first, so ⌘Q records rather than quits.
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard recording else { return super.performKeyEquivalent(with: event) }
-        took(event)
-        return true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard recording else { return super.keyDown(with: event) }
-        took(event)
-    }
+    @objc private func stopRecording() { stop() }
 
     private func took(_ event: NSEvent) {
         let plain = event.modifierFlags.intersection(HotKey.Spec.mask).isEmpty
