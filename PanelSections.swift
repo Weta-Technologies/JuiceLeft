@@ -716,7 +716,7 @@ struct GeneralRows: View {
                 Text("Words").tag(Settings.MenuBar.words)
             }
             .pickerStyle(.segmented).labelsHidden()
-            .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
+            .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“45m” to the limit or to full while charging — the bolt says which). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
         }
     }
 }

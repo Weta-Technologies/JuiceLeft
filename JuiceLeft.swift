@@ -124,7 +124,7 @@ import SwiftUI
     check((8...15).contains(first?.minutes ?? 0) && first?.target == 80, "71 % with 43–48 W in and an 80 % limit: 8–15 min to the limit, got \(String(describing: first?.minutes))")
     check(Format.words(first!.minutes, charging: true, goal: first!.goalText) == "10 Min Until 80%", "worded as \(Format.words(first!.minutes, charging: true, goal: first!.goalText))")
     check(Monitor.menuParts(.words, percent: 71, onAC: true, full: false, charging: true, minutes: first!.minutes, goal: first!.goalText).trailing == "10 Min Until 80%"
-          && Monitor.menuParts(.compact, percent: 71, onAC: true, full: false, charging: true, minutes: 18, goal: "80%").trailing == "80% 18m", "the menu bar aims at the limit")
+          && Monitor.menuParts(.compact, percent: 71, onAC: true, full: false, charging: true, minutes: 18, goal: "80%").trailing == "18m", "the words aim at the limit; compact is the time alone")
     let later = Learner.chargeForecast(Array(trace.prefix(11)), level: trace[10].level, now: trace[10].at, target: 80)
     check((3...7).contains(later?.minutes ?? 0), "five minutes in, at 75.5 %: \(String(describing: later?.minutes)) min to go")
     check(Learner.chargeForecast(trace, level: 80.5, now: trace.last!.at, target: 80) == nil, "at the limit: no countdown")
@@ -251,7 +251,7 @@ import SwiftUI
     let parts = { (style: Settings.MenuBar, onAC: Bool, full: Bool, charging: Bool, m: Int?) in
         Monitor.menuParts(style, percent: 84, onAC: onAC, full: full, charging: charging, minutes: m) }
     check(parts(.words, false, false, false, 130) == ("84%", "2 Hours 10 Min Remaining"), "words: the default")
-    check(parts(.compact, false, false, false, 130) == ("84%", "2:10") && parts(.compact, true, false, true, 45) == ("84%", "Full 45m"), "compact")
+    check(parts(.compact, false, false, false, 130) == ("84%", "2:10") && parts(.compact, true, false, true, 45) == ("84%", "45m"), "compact: the time alone, charging too")
     check(parts(.words, false, false, false, nil) == ("84%", "Estimating…") && parts(.compact, false, false, false, nil) == ("84%", "…"), "estimating")
     check(parts(.words, true, true, false, nil) == ("84%", nil) && parts(.words, true, false, false, 30) == ("84%", nil), "full / on power, not charging: no time")
     check(parts(.percent, false, false, false, 130) == ("84%", nil) && parts(.icon, false, false, false, 130) == (nil, nil), "percent, icon")
@@ -507,6 +507,28 @@ import SwiftUI
     check(decide(true, [me, item(980)]) == false, "980 − 120 ≥ 856: the words fit again")
     check(decide(false, [me, item(860)]) == nil, "and after that expansion nothing is under the notch: no flap")
     check(decide(true, [me, item(766)]) == nil && decide(true, []) == false, "still hidden: stay compact; an empty bar: expand")
+    check(StatusItemController.notchDecision(squeezed: false, items: [item(900)], parked: true, notch: notch, wordsWidth: 200, compactWidth: 80) == true
+          && StatusItemController.notchDecision(squeezed: true, items: [item(980)], parked: true, notch: notch, wordsWidth: 200, compactWidth: 80) == nil,
+          "an item parked off every screen is hidden too: squeeze, and stay")
+
+    // Which windows are menu-bar items: the live layout of a 1512 × 982 screen with a 33 pt bar (CG bounds, top-left origin).
+    let frame = { (x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat, n: Int) in
+        StatusItemController.itemFrame(bounds: CGRect(x: x, y: y, width: w, height: h), layer: 25, number: n, own: 7, screenHeight: 982, barHeight: 33) }
+    check(frame(755, 27, 370, 548, 1) == nil && frame(1133, 28, 370, 836, 2) == nil, "hidden panels at the status level start lower and stand taller: not items")
+    check(frame(0, 982, 0, 0, 3) == nil, "a zero-size window is nothing")
+    check(frame(766, 0, 36, 33, 4) == CGRect(x: 766, y: 949, width: 36, height: 33) && frame(902, 0, 34, 33, 5) != nil, "item windows at the top, bar-high: counted")
+    check(frame(1322, 0, 42, 33, 7) == nil && frame(1322, 0, 42, 33, 8) != nil, "our own item, by window number, is left out")
+    let layout = [frame(755, 27, 370, 548, 1), frame(1133, 28, 370, 836, 2), frame(0, 982, 0, 0, 3), frame(902, 0, 34, 33, 5), frame(936, 0, 34, 33, 6)].compactMap { $0 }
+    check(StatusItemController.notchDecision(squeezed: false, items: layout, notch: notch, wordsWidth: 200, compactWidth: 80) == nil, "that layout, nothing in the gap: the words stay")
+    check(StatusItemController.notchDecision(squeezed: false, items: layout + [frame(766, 0, 36, 33, 4)!], notch: notch, wordsWidth: 200, compactWidth: 80) == true, "an item window at 766: squeeze")
+
+    // The keyboard backlight: a level captured while macOS had it suppressed (0, auto on) never writes that 0 back.
+    check(KeyboardLight.writes(KeyboardLight.Level(brightness: 0, auto: true)) == (nil, true), "suppressed: only auto comes back")
+    check(KeyboardLight.writes(KeyboardLight.Level(brightness: 0.5, auto: true)) == (0.5, true) && KeyboardLight.writes(KeyboardLight.Level(brightness: 0, auto: false)) == (0, false), "a real level, or off, is written as is")
+    let keys = FakeHardware()
+    keys.keys = KeyboardLight.Level(brightness: 0.3, auto: false)
+    keys.setKeyboard(KeyboardLight.Level(brightness: 0, auto: true))
+    check(keys.keys == KeyboardLight.Level(brightness: 0.3, auto: true), "on the fake hardware the restore leaves the brightness alone: \(keys.keys)")
 
     Updater.selfTest()   // versions, the release feed, signatures, the swap script on a fake bundle
 

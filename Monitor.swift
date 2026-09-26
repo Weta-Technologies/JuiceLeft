@@ -858,7 +858,7 @@ struct History: Codable, Equatable {
     }
 
     /// The text either side of the glyph, per the display setting: Apple's "84%" in front, and after it the time —
-    /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full" — "Until 80%" with a charge limit), or compact ("2:10", "Full 45m"); "Estimating…"
+    /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full" — "Until 80%" with a charge limit), or compact ("2:10", "45m" — the time alone, charging or not); "Estimating…"
     /// (or "…") until there is a forecast; nothing at all when the battery is full. Pure, so --selftest can check it.
     nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?, wattsText: String? = nil,
                                       goal: String = "Full") -> (percent: String?, trailing: String?) {
@@ -869,7 +869,7 @@ struct History: Codable, Equatable {
         case .percent: break
         case .compact, .words:
             if onAC && (full || !charging) { break }
-            else if let minutes { trailing = style == .words ? Format.words(minutes, charging: onAC, goal: goal) : onAC ? "\(goal) \(Format.compact(minutes))" : Format.compact(minutes) }
+            else if let minutes { trailing = style == .words ? Format.words(minutes, charging: onAC, goal: goal) : Format.compact(minutes) }   // compact: the time alone; the bolt says charging
             else { trailing = style == .words ? "Estimating…" : "…" }
         }
         if let wattsText { trailing = [trailing, wattsText].compactMap { $0 }.joined(separator: " · ") }

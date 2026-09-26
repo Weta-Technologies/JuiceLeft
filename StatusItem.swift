@@ -97,14 +97,15 @@ import SwiftUI
     private var roomDebounce: Timer?
     nonisolated static let notchMargin: CGFloat = 8
 
-    /// The notch rule, pure for --selftest. `items` are every status item's frame on the menu-bar screen (ours too),
+    /// The notch rule, pure for --selftest. `items` are the menu-bar item windows on the menu-bar screen (ours left
+    /// out), `parked` whether any item window sits off every screen — where macOS puts the ones it has no room for —
     /// `notch` the gap between that screen's top-left and top-right areas, the widths ours in each form. Squeeze the
-    /// moment any item sits in the gap (macOS hides it there); go back to the words only once the leftmost item, moved
-    /// left by the width the words add, would still clear the gap by a margin. The two can never both hold for one
-    /// layout, so nothing flaps. nil = leave it as it is.
-    nonisolated static func notchDecision(squeezed: Bool, items: [CGRect], notch: CGRect, wordsWidth: CGFloat, compactWidth: CGFloat,
+    /// moment an item is hidden (parked, or in the gap); go back to the words only once the leftmost item, moved left
+    /// by the width the words add, would still clear the gap by a margin. The two can never both hold for one layout,
+    /// so nothing flaps. nil = leave it as it is.
+    nonisolated static func notchDecision(squeezed: Bool, items: [CGRect], parked: Bool = false, notch: CGRect, wordsWidth: CGFloat, compactWidth: CGFloat,
                                           margin: CGFloat = notchMargin) -> Bool? {
-        let hidden = items.contains { $0.maxX > notch.minX && $0.minX < notch.maxX }
+        let hidden = parked || items.contains { $0.maxX > notch.minX && $0.minX < notch.maxX }
         if !squeezed { return hidden ? true : nil }
         if hidden { return nil }
         guard let leftmost = items.map(\.minX).min() else { return false }
@@ -117,17 +118,31 @@ import SwiftUI
         return CGRect(x: left.maxX, y: left.minY, width: right.minX - left.maxX, height: left.height)
     }
 
-    /// Every status item's frame in the menu bar of `screen` (the first screen, where the menu bar is), ours included:
-    /// window bounds and level only — no names, no permission. CG's top-left origin flipped into the screen's own.
-    private static func statusItemFrames(on screen: NSScreen) -> [CGRect] {
-        guard let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] else { return [] }
-        let level = Int(CGWindowLevelForKey(.statusWindow)), band = screen.frame.maxY - 40
-        return list.compactMap { info in
-            guard (info[kCGWindowLayer as String] as? Int) == level, let dict = info[kCGWindowBounds as String] as? NSDictionary,
-                  let b = CGRect(dictionaryRepresentation: dict), b.width > 0, b.height > 0, b.height < 60 else { return nil }
-            let rect = CGRect(x: b.minX, y: screen.frame.height - b.maxY, width: b.width, height: b.height)
-            return rect.maxY > band && screen.frame.intersects(rect) ? rect : nil
+    /// One window from the window list → its frame in the menu-bar screen's coordinates, if it is a menu-bar item:
+    /// the status level, the top edge within 2 pt of the screen's top, no taller than the menu bar (+ 2 pt), some
+    /// width, and not our own item (by window number — on recent macOS every item window belongs to the system, so
+    /// owners tell nothing). Panels and popovers at the same level start lower and stand taller; a zero-size window is
+    /// nothing. Pure, for --selftest; `bounds` are CG's (origin top-left), `screenHeight` flips them.
+    nonisolated static func itemFrame(bounds: CGRect, layer: Int, number: Int, own: Int?, screenHeight: CGFloat, barHeight: CGFloat) -> CGRect? {
+        guard layer == Int(CGWindowLevelForKey(.statusWindow)), number != own, bounds.width > 0, bounds.height > 0,
+              bounds.minY <= 2, bounds.height <= barHeight + 2 else { return nil }
+        return CGRect(x: bounds.minX, y: screenHeight - bounds.maxY, width: bounds.width, height: bounds.height)
+    }
+
+    /// The other menu-bar items: those on the menu-bar screen, and whether any is parked off every screen. Window
+    /// bounds, level and number only — no names, no permission.
+    private static func statusItems(on screen: NSScreen, own: Int?) -> (onScreen: [CGRect], parked: Bool) {
+        guard let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] else { return ([], false) }
+        let barHeight = max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)
+        var onScreen: [CGRect] = [], parked = false
+        for info in list {
+            guard let layer = info[kCGWindowLayer as String] as? Int, let number = info[kCGWindowNumber as String] as? Int,
+                  let dict = info[kCGWindowBounds as String] as? NSDictionary, let bounds = CGRect(dictionaryRepresentation: dict),
+                  let rect = itemFrame(bounds: bounds, layer: layer, number: number, own: own, screenHeight: screen.frame.height, barHeight: barHeight) else { continue }
+            if screen.frame.intersects(rect) { onScreen.append(rect) }
+            else if !NSScreen.screens.contains(where: { $0.frame.intersects(rect) }) { parked = true }
         }
+        return (onScreen, parked)
     }
 
     private func scheduleRoomCheck() {
@@ -156,8 +171,8 @@ import SwiftUI
             return
         }
         guard let notch, monitor.interactive, monitor.s.menuBar == .words else { return }
-        let widths = monitor.itemWidths
-        if let decision = Self.notchDecision(squeezed: monitor.squeezed, items: Self.statusItemFrames(on: bar), notch: notch,
+        let widths = monitor.itemWidths, others = Self.statusItems(on: bar, own: window.windowNumber)
+        if let decision = Self.notchDecision(squeezed: monitor.squeezed, items: others.onScreen, parked: others.parked, notch: notch,
                                              wordsWidth: widths.words, compactWidth: widths.compact) {
             monitor.setSqueezed(decision)
         }

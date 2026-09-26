@@ -31,7 +31,11 @@ final class FakeHardware: Hardware {
     func brightness() -> Float? { level }
     func setBrightness(_ value: Float) { level = value; log.append("brightness \(value)") }
     func keyboard() -> KeyboardLight.Level? { keys }
-    func setKeyboard(_ level: KeyboardLight.Level) { keys = level; log.append("keyboard \(level.brightness) auto \(level.auto)") }
+    func setKeyboard(_ level: KeyboardLight.Level) {   // the same rule as the real backlight: a suppressed 0 is never written
+        let write = KeyboardLight.writes(level)
+        keys = KeyboardLight.Level(brightness: write.brightness ?? keys.brightness, auto: write.auto)
+        log.append("keyboard \(write.brightness.map { "\($0)" } ?? "kept") auto \(write.auto)")
+    }
     func ambientLight() -> Double? { lux }
     func usbDevices() -> [USBPower.Device] { devices }
 }
@@ -89,13 +93,21 @@ enum KeyboardLight {
         return Level(brightness: brightness(c, s, k), auto: isAuto(c, s2, k))
     }
 
+    /// What putting a level back writes: the brightness — unless the level was captured while macOS had the backlight
+    /// suppressed (0 with auto on): writing that 0 would become the user's preference and leave the keyboard dark, so
+    /// only auto comes back and macOS picks the brightness itself. Pure, for --selftest.
+    static func writes(_ level: Level) -> (brightness: Float?, auto: Bool) {
+        (level.auto && level.brightness == 0 ? nil : level.brightness, level.auto)
+    }
+
     static func set(_ level: Level) {
         guard let (c, s, k, setBrightness) = method("setBrightness:forKeyboard:", (@convention(c) (AnyObject, Selector, Float, UInt64) -> Bool).self),
               let (_, s2, _, enableAuto) = method("enableAutoBrightness:forKeyboard:", (@convention(c) (AnyObject, Selector, Bool, UInt64) -> Void).self)
         else { return NSLog("JuiceLeft: keyboard backlight unavailable") }
-        if !level.auto { enableAuto(c, s2, false, k) }   // off first, so ambient light can't pull it back up
-        if !setBrightness(c, s, level.brightness, k) { NSLog("JuiceLeft: keyboard backlight set failed") }
-        if level.auto { enableAuto(c, s2, true, k) }
+        let write = writes(level)
+        if !write.auto { enableAuto(c, s2, false, k) }   // off first, so ambient light can't pull it back up
+        if let brightness = write.brightness, !setBrightness(c, s, brightness, k) { NSLog("JuiceLeft: keyboard backlight set failed") }
+        if write.auto { enableAuto(c, s2, true, k) }
     }
 }
 
