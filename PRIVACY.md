@@ -16,17 +16,19 @@ JuiceLeft is developed and published by Weta Technologies Limited ([CyborgFinger
 
 ## What stays on your Mac
 
-- Your settings, in `~/Library/Preferences/io.github.cyborgfingers.juiceleft.plist`.
+- Your settings, in `~/Library/Preferences/io.github.cyborgfingers.juiceleft.plist` — including your keyboard shortcut, if you set one.
 - Battery history for the forecast and health coach (battery level, battery watts, charger on/off, and a daily line of cycle count and health), in `~/Library/Application Support/JuiceLeft/history.json` — a few hundred KB at most. It contains no app names, files or personal information.
 - If you use energy modes or the charging light: small request files in `/Library/Application Support/JuiceLeft/`, read only by JuiceLeft's own helper.
 - The power-use list reads which of your apps are using the processor while the panel is open; it is shown, never stored or sent.
+- The *Your devices* card reads the battery level and name of your Bluetooth mice, keyboards and trackpads from macOS; they are shown, never stored or sent, and no Bluetooth permission is needed.
+- `juiceleft://` links accept only JuiceLeft's own commands; nothing is stored or returned.
 
 This data never leaves your Mac. You can delete it at any time (see the README's Uninstall section).
 
 ## Permissions JuiceLeft may ask for
 
 - **Administrator password** — only if you use energy modes or the charging light, to install the helper.
-- **Notifications** — optional, for low-battery and charging alerts.
+- **Notifications** — optional, for battery, accessory and charging alerts; macOS asks the first time you turn one on.
 - **Login item** — so JuiceLeft starts when you log in; you can turn this off.
 
 ## Children

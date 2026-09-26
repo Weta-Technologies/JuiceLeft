@@ -521,7 +521,7 @@ import UserNotifications
         if let own = ownRequirement { check(satisfies(Bundle.main.bundleURL, own), "this app meets its own designated requirement") }
         try? files.removeItem(at: dir)
         check(installBlocker(URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/y/d/Fake.app"))?.contains("Move it into Applications") == true
-              && installBlocker(URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")) != nil, "unwritable places are refused")
+              && installBlocker(URL(fileURLWithPath: "/System/Library/CoreServices/Fake.app")) != nil, "unwritable places are refused")
     }
 }
 
