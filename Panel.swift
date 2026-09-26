@@ -71,6 +71,8 @@ struct Panel: View {
             AlertsCard(monitor: monitor)
             EnergyCard(meter: monitor.energy)
             BatteryCard(monitor: monitor)
+            HistoryCard(monitor: monitor)
+            DevicesCard(monitor: monitor)
             StretchCard(monitor: monitor)
             ChargingCard(monitor: monitor)
             GeneralRows(monitor: monitor)
@@ -112,6 +114,7 @@ struct Panel: View {
         .animation(reduceMotion ? nil : panelEase, value: monitor.saving)
         .animation(reduceMotion ? nil : panelEase, value: monitor.helperReady)
         .animation(reduceMotion ? nil : panelEase, value: monitor.aiNudgeDismissed)
+        .animation(reduceMotion ? nil : panelEase, value: monitor.devices)
     }
 }
 

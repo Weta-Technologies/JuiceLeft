@@ -261,7 +261,7 @@ struct BatteryCard: View {
 
     var body: some View {
         Card(title: "Battery", subtitle: summary, symbol: "heart.text.square.fill", tint: .pink, lit: monitor.reading?.failed == false,
-             expanded: $expanded, help: "Health, temperature, power, and the last twelve hours.", trailing: { EmptyView() }) {
+             expanded: $expanded, help: "Health, temperature, power, and how the battery is being treated.", trailing: { EmptyView() }) {
             if let r = monitor.reading {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
@@ -303,10 +303,6 @@ struct BatteryCard: View {
                     }
                 }
                 .padding(.leading, 2)
-                Text("Last 12 hours").font(.caption).foregroundStyle(.secondary).padding(.top, 2)
-                LevelChart(points: monitor.history.points, now: r.at, warnAt: monitor.s.warnAt, alertAt: monitor.s.alertAt)
-                    .frame(height: 56)
-                    .accessibilityLabel("Battery level over the last twelve hours")
                 HealthCoachRows(monitor: monitor)
             }
         }
@@ -444,20 +440,21 @@ extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }
 
-/// The level over the last twelve hours: the line, the flash level dashed, the tone level shaded. Gaps stay gaps.
+/// The level over a chosen window: the line, the flash level dashed, the tone level shaded. Gaps (the Mac asleep)
+/// stay gaps at any range, since a real gap is always more than a few minutes without a sample.
 struct LevelChart: View {
     let points: [History.Point]
     let now: Date
+    var hours = 12.0
     let warnAt: Int
     let alertAt: Int
-    static let hours = 12.0
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let from = now.addingTimeInterval(-Self.hours * 3600)
+            let from = now.addingTimeInterval(-hours * 3600)
             let recent = points.filter { $0.t >= from }
-            let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (Self.hours * 3600)) * w }
+            let x = { (t: Date) in CGFloat(t.timeIntervalSince(from) / (hours * 3600)) * w }
             let y = { (l: Double) in h * CGFloat(1 - l / 100) }
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.04))
@@ -484,6 +481,135 @@ struct LevelChart: View {
     }
 }
 
+/// The level over the last 12 hours, day or three days, with what the window comes to in one line.
+struct HistoryCard: View {
+    @ObservedObject var monitor: Monitor
+    @AppStorage("historyExpanded") private var expanded = false
+    @AppStorage("historyHours") private var hours = 24
+    private let ranges = [(12, "12 hours"), (24, "24 hours"), (72, "3 days")]
+
+    init(monitor: Monitor) {
+        self.monitor = monitor
+        _expanded = AppStorage(wrappedValue: false, "historyExpanded", store: monitor.defaults)
+        _hours = AppStorage(wrappedValue: 24, "historyHours", store: monitor.defaults)
+    }
+
+    private var summary: History.Summary? {
+        monitor.reading.flatMap { History.summary(monitor.history.points, since: $0.at.addingTimeInterval(-Double(hours) * 3600)) }
+    }
+
+    private var subtitle: String {
+        guard let s = summary else { return "Battery level over time" }
+        var parts = ["\(s.from)% → \(s.to)%"]
+        if let d = s.drainPerHour { parts.append(String(format: "about %.0f%%/h on battery", d)) }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Card(title: "History", subtitle: subtitle, symbol: "chart.xyaxis.line", tint: .blue, lit: monitor.history.points.count >= 2,
+             expanded: $expanded, help: "The battery level over the window you pick, kept on this Mac for three days. Blue is on battery, green is charging; a gap is the Mac asleep.",
+             trailing: { EmptyView() }) {
+            Divider()
+            Picker("Range", selection: $hours) {
+                ForEach(ranges, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .help("How far back the chart looks.")
+            if let r = monitor.reading {
+                LevelChart(points: monitor.history.points, now: r.at, hours: Double(hours), warnAt: monitor.s.warnAt, alertAt: monitor.s.alertAt)
+                    .frame(height: 72)
+                    .accessibilityLabel("Battery level over the last \(ranges.first { $0.0 == hours }?.1 ?? "day"): \(subtitle)")
+            }
+            HStack(spacing: 12) {
+                legend(Color.accentColor, "On battery")
+                legend(.green, "Charging")
+                legend(.orange, "Flash level")
+                Spacer()
+            }
+            .font(.caption2).foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func legend(_ color: Color, _ text: String) -> some View {
+        HStack(spacing: 4) { Capsule().fill(color).frame(width: 10, height: 3); Text(text) }
+    }
+}
+
+/// The batteries of the Bluetooth accessories paired with this Mac, and an optional word when one runs low. The
+/// card only appears while something with a battery is connected.
+struct DevicesCard: View {
+    @ObservedObject var monitor: Monitor
+    @AppStorage("devicesExpanded") private var expanded = false
+
+    init(monitor: Monitor) {
+        self.monitor = monitor
+        _expanded = AppStorage(wrappedValue: false, "devicesExpanded", store: monitor.defaults)
+    }
+
+    private var subtitle: String {
+        guard let lowest = monitor.devices.first else { return "No accessories with a battery" }
+        if monitor.devices.count == 1 { return "\(lowest.name) · \(lowest.percent)%" }
+        return "\(lowest.name) \(lowest.percent)% · \(monitor.devices.count - 1) more"
+    }
+
+    var body: some View {
+        if !monitor.devices.isEmpty {
+            Card(title: "Your devices", subtitle: subtitle, symbol: "keyboard", tint: .indigo, lit: true, expanded: $expanded,
+                 help: "The batteries of the Bluetooth mice, keyboards and trackpads connected to this Mac — read from macOS, nothing installed or stored.",
+                 trailing: { EmptyView() }) {
+                Divider()
+                VStack(spacing: 6) {
+                    ForEach(monitor.devices) { DeviceRow(device: $0, lowAt: monitor.s.deviceAlertAt) }
+                }
+                SwitchRow(title: "Tell me when one gets low", subtitle: "A notification at \(monitor.s.deviceAlertAt)%, once per charge",
+                          help: "Checks the accessories every ten minutes while this is on. Off, JuiceLeft only reads them while the panel is open.",
+                          isOn: $monitor.s.deviceAlert)
+                if monitor.s.deviceAlert {
+                    LevelRow(title: "Low at", value: Binding(get: { monitor.s.deviceAlertAt }, set: { monitor.s.deviceAlertAt = $0 }), range: 5...50,
+                             help: "The level an accessory has to reach before JuiceLeft says so.")
+                }
+            }
+        }
+    }
+
+    /// A symbol that exists on this macOS for the kind of device; never a blank.
+    static func symbol(_ kind: AccessoryBattery.Kind) -> String {
+        let preferred: String
+        switch kind {
+        case .mouse: preferred = "computermouse.fill"
+        case .keyboard: preferred = "keyboard"
+        case .trackpad: preferred = "rectangle.and.hand.point.up.left.fill"
+        case .other: preferred = "dot.radiowaves.left.and.right"
+        }
+        return NSImage(systemSymbolName: preferred, accessibilityDescription: nil) != nil ? preferred : "dot.radiowaves.left.and.right"
+    }
+}
+
+/// One accessory: its kind, name, a bar and the percent — red at the alert level, orange under a third.
+struct DeviceRow: View {
+    let device: AccessoryBattery.Device
+    let lowAt: Int
+    private static let lowish = 30
+
+    private var color: Color { device.percent <= lowAt ? .red : device.percent <= Self.lowish ? .orange : .green }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: DevicesCard.symbol(device.kind)).foregroundStyle(.secondary).frame(width: 18).accessibilityHidden(true)
+            Text(device.name).font(.callout).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 6)
+            Capsule().fill(.quaternary).frame(width: 64, height: 5)
+                .overlay(alignment: .leading) { Capsule().fill(color).frame(width: 64 * CGFloat(device.percent) / 100) }
+                .accessibilityHidden(true)
+            Text("\(device.percent)%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(device.name), \(device.percent) percent")
+    }
+}
+
 /// Reminders that keep a battery healthier.
 struct ChargingCard: View {
     @ObservedObject var monitor: Monitor
@@ -495,6 +621,7 @@ struct ChargingCard: View {
     }
 
     private var summary: String {
+        if let slow = monitor.chargerAdvice { return slow }   // a weak charger is the one thing worth saying first
         var parts: [String] = []
         if monitor.s.unplugReminder { parts.append("Unplug at \(Monitor.unplugAt)%") }
         if monitor.s.fullNotice { parts.append("Full notice") }
@@ -547,6 +674,11 @@ struct GeneralRows: View {
                 .pickerStyle(.segmented).labelsHidden()
                 .help("Icon: the battery alone. Percent: Apple's look, “84%” and the battery. Compact: adds the time after it, “2:10” (“Full 45m” charging). Words: “2 Hours 10 Min Remaining” (“45 Min Until Full” charging). The hover card and VoiceOver always have the whole story.")
             }
+            if monitor.s.menuBar != .icon {
+                SwitchRow(title: "Show the power draw too", subtitle: "“−12 W” on battery, “+45 W” charging",
+                          help: "Adds what is flowing out of (or into) the battery to the menu-bar item. Off keeps Apple's look exactly.",
+                          isOn: $monitor.s.menuBarWatts)
+            }
             SwitchRow(title: "Replace the macOS battery icon", subtitle: "Apple's battery item is hidden while JuiceLeft runs and comes back when it quits",
                       help: "Off puts Apple's battery item back straight away and leaves it alone from then on. It lives in System Settings › Control Center › Battery.",
                       isOn: $monitor.s.replaceSystemIcon)
@@ -554,9 +686,14 @@ struct GeneralRows: View {
                 SwitchRow(title: "Apple Intelligence wording", subtitle: "Phrases the summary line on this Mac; the numbers are always JuiceLeft's",
                           help: "Uses the on-device model to word the summary. Nothing leaves the Mac.", isOn: $monitor.s.insight)
             }
-            Button("Reinstall helper…") { monitor.setUpHelper() }
-                .buttonStyle(.link).font(.caption)
-                .help("If energy modes or the charging light ever stop working: reinstalls JuiceLeft's helper (one administrator prompt).")
+            HStack(spacing: 6) {
+                Text("Shortcuts and scripts: juiceleft:// links.").font(.caption).foregroundStyle(.secondary)
+                    .help("Open one of these from Shortcuts, a script or the Terminal:\njuiceleft://savebattery?on=1 (on=0 undoes)\njuiceleft://mode?set=low | automatic | high\njuiceleft://topup (charge to full once)\njuiceleft://monitoring?on=0\njuiceleft://snooze\nNothing else is accepted.")
+                Spacer(minLength: 0)
+                Button("Reinstall helper…") { monitor.setUpHelper() }
+                    .buttonStyle(.link).font(.caption)
+                    .help("If energy modes or the charging light ever stop working: reinstalls JuiceLeft's helper (one administrator prompt).")
+            }
         }
     }
 }

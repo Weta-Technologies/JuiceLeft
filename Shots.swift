@@ -24,7 +24,7 @@ import SwiftUI
         let power = PowerMode.State(battery: .automatic, adapter: .automatic, highPowerSupported: true)
         let make = { (percent: Int, onAC: Bool, forecast: Forecast?, phase: Alerts.Phase, tips: [Tip]) in
             Monitor(shots: Settings(), reading: reading(percent: percent, onAC: onAC, at: now), forecast: forecast, phase: phase, history: history(now: now),
-                    tips: tips, ranking: ranking, chargeLimit: limit, power: power, defaults: defaults, source: source)
+                    tips: tips, ranking: ranking, chargeLimit: limit, power: power, devices: devices, defaults: defaults, source: source)
         }
         let dim = Tip(id: "brightness", text: "Screen at 85%: dim to 40%", gain: 41, estimated: true, fix: .dim(to: 0.4))
         let hog = Tip(id: "app", text: "Safari is working hard: 62% of a core", gain: 25, estimated: true, fix: .quit(app: "Safari"))
@@ -36,11 +36,12 @@ import SwiftUI
             ("charging", make(62, true, full, .clear, []), ["stretchExpanded", "chargingExpanded"]),
             ("warning", make(18, false, low, .warning, [lowPower]), ["alertsExpanded"]),
             ("update", make(84, false, flat, .clear, [dim]), ["healthExpanded"]),
+            ("history", make(84, false, flat, .clear, []), ["historyExpanded", "devicesExpanded"]),
         ]
         for state in states {
             if state.name == "update" { Updater.shared.offerSample() }
             defaults.set(state.name != "setup", forKey: "tapHintSeen")
-            for key in ["alertsExpanded", "healthExpanded", "stretchExpanded", "chargingExpanded"] { defaults.set(state.expanded.contains(key), forKey: key) }
+            for key in ["alertsExpanded", "healthExpanded", "stretchExpanded", "chargingExpanded", "historyExpanded", "devicesExpanded"] { defaults.set(state.expanded.contains(key), forKey: key) }
             for dark in [false, true] {
                 write(Panel(monitor: state.monitor).content.frame(width: 344), as: "\(state.name)-\(dark ? "dark" : "light")", dark: dark, to: out)
                 if ["battery", "warning"].contains(state.name) { write(HoverCardView(monitor: state.monitor), as: "hover-\(state.name)-\(dark ? "dark" : "light")", dark: dark, to: out) }
@@ -77,18 +78,31 @@ import SwiftUI
         return r
     }
 
-    /// Twelve hours: five on the charger at 100 %, then a steady discharge to 84 %; three weeks of daily log.
+    /// Three days, a point a minute like the real curve: each day sleeps seven hours (a gap), charges from 30 % to
+    /// full over the morning, sits full on the charger, then drains through the afternoon and evening — to 30 % on
+    /// the earlier days, to 84 % today. Three weeks of daily log for the coach.
     private static func history(now: Date) -> History {
         var h = History()
-        for i in 0..<144 {
-            let t = now.addingTimeInterval(Double(i - 143) * 300), charging = i < 60
-            h.points.append(History.Point(t: t, l: charging ? 100 : 100 - Double(i - 60) / 83 * 16, w: charging ? 0 : -17, c: charging))
+        let day = 24 * 60
+        for i in 0..<(3 * day) {
+            let k = i % day, d = 2 - i / day   // minute of that day, and 0 = today
+            guard k >= 420 else { continue }   // asleep until 07:00
+            let t = now.addingTimeInterval(Double(i - 3 * day + 1) * 60)
+            let level: Double, charging: Bool
+            if k < 600 { level = 30 + Double(k - 420) / 180 * 70; charging = true }
+            else if k < 960 { level = 100; charging = true }
+            else { level = 100 - Double(k - 960) / 480 * (d == 0 ? 16 : 70); charging = false }
+            h.points.append(History.Point(t: t, l: level, w: charging ? (level < 100 ? 30 : 0) : -17, c: charging))
         }
         h.days = (0..<21).map { DayLog(day: now.addingTimeInterval(Double($0 - 20) * 86400), cycles: 112 + $0, health: 96.4 - Double($0) * 0.02) }
         h.learner.discharges = 3
         h.learner.relativeError = 0.08
         return h
     }
+
+    private static let devices = [AccessoryBattery.Device(id: "trackpad", name: "Magic Trackpad", percent: 12, kind: .trackpad),
+                                  AccessoryBattery.Device(id: "mouse", name: "Magic Mouse", percent: 47, kind: .mouse),
+                                  AccessoryBattery.Device(id: "keyboard", name: "Magic Keyboard", percent: 88, kind: .keyboard)]
 
     private static let ranking = Ranking(
         apps: [AppEnergy(id: "/Applications/Safari.app", name: "Safari", bundle: "/Applications/Safari.app", cpuPercent: 62, share: 0.34),

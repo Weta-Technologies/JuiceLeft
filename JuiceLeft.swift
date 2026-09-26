@@ -42,6 +42,11 @@ import SwiftUI
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Shortcuts and scripts drive JuiceLeft through its `juiceleft://` scheme; only the whitelisted actions run.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { if let action = URLAction.parse(url) { monitor?.handle(action) } }
+    }
 }
 
 // MARK: - Self-test
@@ -374,10 +379,65 @@ import SwiftUI
     check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%")).size.width > MenuIcon.glyphWidth + 20, "percent makes room for the text")
     check(MenuIcon.draw(MenuIcon.Frame(level: 60, percent: "60%", trailing: "2 Hours 10 Min Remaining")).size.width > MenuIcon.glyphWidth + 120, "the words make room after the glyph")
 
+    // Menu-bar power draw: an opt-in "· −12 W" after the trailing text; the icon-only style keeps the battery alone.
+    check(Format.signedWatts(-12.4) == "−12 W" && Format.signedWatts(45.0) == "+45 W", "signed watts")
+    check(parts(.words, false, false, false, 130) == ("84%", "2 Hours 10 Min Remaining"), "watts off: unchanged")
+    check(Monitor.menuParts(.words, percent: 84, onAC: false, full: false, charging: false, minutes: 130, wattsText: "−12 W") == ("84%", "2 Hours 10 Min Remaining · −12 W"), "watts appended to the words")
+    check(Monitor.menuParts(.percent, percent: 84, onAC: false, full: false, charging: false, minutes: nil, wattsText: "−12 W") == ("84%", "−12 W"), "watts stands alone with percent")
+    check(Monitor.menuParts(.compact, percent: 84, onAC: true, full: false, charging: false, minutes: 45, wattsText: "+45 W") == ("84%", "+45 W"), "watts on power, not charging")
+    check(Monitor.menuParts(.icon, percent: 84, onAC: false, full: false, charging: false, minutes: 130, wattsText: "−12 W") == (nil, nil), "icon stays alone, watts and all")
+
+    // Charging insight: a weak charger is worth a quiet word; a 30 W-and-up adapter isn't.
+    check(ChargerAdvice.slowLine(onAC: true, charging: true, watts: 20) == "Charging slowly — 20 W charger", "weak charger flagged")
+    check(ChargerAdvice.slowLine(onAC: true, charging: true, watts: 30) == nil && ChargerAdvice.slowLine(onAC: true, charging: true, watts: 96) == nil, "a strong charger isn't")
+    check(ChargerAdvice.slowLine(onAC: true, charging: false, watts: 20) == nil && ChargerAdvice.slowLine(onAC: false, charging: false, watts: 20) == nil && ChargerAdvice.slowLine(onAC: true, charging: true, watts: nil) == nil, "no charger, no word")
+
+    // History summary: the level then and now, and the average drain over the on-battery time in the window.
+    var hist: [History.Point] = []
+    for m in 0..<180 { hist.append(History.Point(t: at(Double(m)), l: m < 60 ? 100 : 100 - Double(m - 60) / 120 * 16, w: nil, c: m < 60)) }
+    let sum = History.summary(hist, since: at(0))
+    check(sum?.from == 100 && sum?.to == 84 && near(sum?.drainPerHour ?? 0, 8, 0.05), "history summary: \(String(describing: sum))")
+    check(History.summary([], since: at(0)) == nil && History.summary([History.Point(t: at(0), l: 50, w: nil, c: false)], since: at(0)) == nil, "summary needs two points")
+
+    // Accessory batteries: a Bluetooth mouse parses; a wired or level-less entry doesn't; the name gives the kind.
+    check(AccessoryBattery.parse(["BatteryPercent": 55, "Product": "Magic Mouse", "Transport": "Bluetooth", "DeviceAddress": "aa:bb"]) == AccessoryBattery.Device(id: "aa:bb", name: "Magic Mouse", percent: 55, kind: .mouse), "mouse parses")
+    check(AccessoryBattery.parse(["BatteryPercent": 80, "Product": "Magic Keyboard", "Transport": "USB"]) == nil, "wired accessory skipped")
+    check(AccessoryBattery.parse(["Product": "Magic Trackpad", "Transport": "Bluetooth"]) == nil && AccessoryBattery.parse(["BatteryPercent": 0, "Product": "Magic Mouse"]) == nil, "no level, no device")
+    check(AccessoryBattery.kind(for: "Office Magic Trackpad") == .trackpad && AccessoryBattery.kind(for: "K380 Keyboard") == .keyboard && AccessoryBattery.kind(for: "Studio Display") == .other, "kinds")
+
+    // The low-accessory latch fires once, clears with hysteresis, and forgets a device that goes away.
+    let mouse = { (p: Int) in AccessoryBattery.Device(id: "m", name: "Magic Mouse", percent: p, kind: .mouse) }
+    var da = DeviceAlerts()
+    check(da.due([mouse(20)], level: 15).isEmpty, "20% at a 15% level: quiet")
+    check(da.due([mouse(15)], level: 15).map(\.id) == ["m"] && da.due([mouse(14)], level: 15).isEmpty, "15%: one warning, no repeat")
+    check(da.due([mouse(20)], level: 15).isEmpty && da.due([mouse(15)], level: 15).map(\.id) == ["m"], "recovered past hysteresis, then low again: warns again")
+    _ = da.due([], level: 15)
+    check(da.alerted.isEmpty, "a device that goes away is forgotten")
+
+    // The URL scheme: only the whitelisted actions, only with a valid single parameter; everything else is nil.
+    check(URLAction.parse(URL(string: "juiceleft://savebattery?on=1")!) == .saveBattery(true) && URLAction.parse(URL(string: "juiceleft://savebattery?on=off")!) == .saveBattery(false), "savebattery on/off")
+    check(URLAction.parse(URL(string: "juiceleft://mode?set=low")!) == .setMode(.low) && URLAction.parse(URL(string: "juiceleft://mode?set=auto")!) == .setMode(.automatic) && URLAction.parse(URL(string: "juiceleft://mode?set=high")!) == .setMode(.high), "mode set")
+    check(URLAction.parse(URL(string: "juiceleft://topup")!) == .topUp && URLAction.parse(URL(string: "juiceleft://snooze")!) == .snooze && URLAction.parse(URL(string: "juiceleft://monitoring?on=0")!) == .setArmed(false), "topup, snooze, monitoring")
+    check(URLAction.parse(URL(string: "juiceleft://savebattery?on=maybe")!) == nil && URLAction.parse(URL(string: "juiceleft://mode?set=turbo")!) == nil, "bad values rejected")
+    check(URLAction.parse(URL(string: "juiceleft://savebattery?on=1&and=delete")!) == nil && URLAction.parse(URL(string: "juiceleft://topup?x=1")!) == nil, "extra parameters rejected")
+    check(URLAction.parse(URL(string: "juiceleft://wipe?all=1")!) == nil && URLAction.parse(URL(string: "https://evil.example/mode?set=low")!) == nil && URLAction.parse(URL(string: "juiceleft://?on=1")!) == nil, "unknown host, wrong scheme, no host")
+
+    // New settings decode to their defaults from an older blob, and take a saved value (clamped) from a newer one.
+    let suite13 = "io.github.cyborgfingers.juiceleft.selftest13"
+    let d13 = UserDefaults(suiteName: suite13)!
+    d13.set(#"{"warnAt":20}"#.data(using: .utf8), forKey: Settings.key)
+    let old = Settings.load(d13)
+    check(!old.menuBarWatts && !old.deviceAlert && old.deviceAlertAt == 15, "new fields default on an older blob: \(old)")
+    d13.set(#"{"menuBarWatts":true,"deviceAlert":true,"deviceAlertAt":999}"#.data(using: .utf8), forKey: Settings.key)
+    let new = Settings.load(d13)
+    d13.removePersistentDomain(forName: suite13)
+    check(new.menuBarWatts && new.deviceAlert && new.deviceAlertAt == 50, "new fields kept and clamped: \(new)")
+
     Updater.selfTest()   // versions, the release feed, signatures, the swap script on a fake bundle
 
     let r = reading!
     print("MagSafe port: \(MagSafePort.exists ? "present" : "none"), power through it now: \(MagSafePort.active), lid closed: \(Lid.read())")
+    print("Accessories with a battery: \(AccessoryBattery.read().map { "\($0.name) \($0.percent)%" }.joined(separator: ", ").ifEmpty("none"))")
     print("PASS: alert rules, forecast + learning (priors \(String(format: "%.1f", morning.rate))/\(String(format: "%.1f", evening.rate)) → \(String(format: "%.1f", evening2.rate)) %/h, miss \(String(format: "%.0f", (learner.relativeError ?? 0) * 100))%), settings, apps, gesture, glyphs, updater; battery \(r.percent)% \(r.onAC ? "on power" : "on battery"), health \(r.health.map { String(format: "%.0f%%", $0) } ?? "?"), \(r.cycles ?? 0) cycles; Apple Intelligence \(AppleIntelligence.status)")
     exit(0)
 }

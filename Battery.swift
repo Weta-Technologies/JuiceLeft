@@ -195,4 +195,7 @@ enum Format {
     static func rounded5(_ minutes: Int) -> Int { Int((Double(max(minutes, 0)) / 5).rounded()) * 5 }
 
     static func watts(_ w: Double) -> String { String(format: abs(w) < 10 ? "%.1f W" : "%.0f W", abs(w)) }
+
+    /// The menu bar's compact power draw: "−12 W" draining, "+45 W" charging, to the nearest watt.
+    static func signedWatts(_ w: Double) -> String { "\(w < 0 ? "−" : "+")\(Int(abs(w).rounded())) W" }
 }

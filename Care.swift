@@ -198,6 +198,18 @@ enum Tips {
     }
 }
 
+/// A weak charger: below this the charge is slow for any Mac (a phone or iPad brick), and worth a quiet word. A
+/// 30 W-and-up adapter can charge a MacBook Air at full speed, so it isn't flagged.
+enum ChargerAdvice {
+    static let slowWatts = 30
+
+    /// The line for the panel and the plug notification, or nil when the charger is fine (or none is charging).
+    static func slowLine(onAC: Bool, charging: Bool, watts: Int?) -> String? {
+        guard onAC, charging, let w = watts, w > 0, w < slowWatts else { return nil }
+        return "Charging slowly — \(w) W charger"
+    }
+}
+
 /// Battery temperature: hot is 35 °C on the charger, 40 °C on battery, and it takes 2 °C of cooling to clear.
 struct HeatGuard: Equatable {
     var hot = false

@@ -24,5 +24,18 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Weta Technologies Limited. All rights reserved.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.github.cyborgfingers.juiceleft.url</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>juiceleft</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

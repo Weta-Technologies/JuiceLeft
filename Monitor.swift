@@ -15,6 +15,9 @@ struct Settings: Codable, Equatable {
     var fullNotice = false
     var plugNotices = false      // charger connected / disconnected
     var menuBar = MenuBar.words     // "84% [battery] 2 Hours 10 Min Remaining"
+    var menuBarWatts = false     // also show the power draw in the menu bar, e.g. "· −12 W"
+    var deviceAlert = false      // notify when a connected accessory's battery gets low
+    var deviceAlertAt = 15       // %: the accessory low-battery level
     var replaceSystemIcon = true // hide Apple's battery item while JuiceLeft runs
     var insight = true           // the plain-English line (Apple Intelligence phrases it when available)
     var smartLowPower = true     // Low Power Mode by itself at 30 % (or under an hour left), back on the charger
@@ -45,6 +48,7 @@ struct Settings: Codable, Equatable {
         var s = self
         s.warnAt = max(5, min(50, s.warnAt))
         s.alertAt = max(1, min(s.warnAt, s.alertAt))
+        s.deviceAlertAt = max(5, min(50, s.deviceAlertAt))
         s.volume = max(0, min(1, s.volume))
         s.brightnessCapLevel = max(0.2, min(0.8, s.brightnessCapLevel))
         return s
@@ -89,6 +93,23 @@ struct History: Codable, Equatable {
         (try? JSONDecoder().decode(History.self, from: Data(contentsOf: url))) ?? History()
     }
 
+    /// A one-line read on a window of the curve: the level then and now, and the average drain over the time spent on
+    /// battery in it. Pure, so --selftest can check it; nil until there are two points to compare.
+    struct Summary: Equatable { var from: Int; var to: Int; var drainPerHour: Double? }
+    static func summary(_ points: [Point], since: Date) -> Summary? {
+        let window = points.filter { $0.t >= since }
+        guard let first = window.first, let last = window.last, window.count >= 2 else { return nil }
+        var dropped = 0.0, batteryHours = 0.0
+        for (a, b) in zip(window, window.dropFirst()) {
+            let gap = b.t.timeIntervalSince(a.t)
+            guard gap > 0, gap < 5 * 60, !a.c else { continue }   // only real, awake, on-battery stretches
+            batteryHours += gap / 3600
+            dropped += max(0, a.l - b.l)
+        }
+        return Summary(from: Int(first.l.rounded()), to: Int(last.l.rounded()),
+                       drainPerHour: batteryHours >= 0.25 && dropped > 0 ? dropped / batteryHours : nil)
+    }
+
     func save(to url: URL) {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -108,6 +129,7 @@ struct History: Codable, Equatable {
             guard s != oldValue else { return }
             defaults.set(try? JSONEncoder().encode(s), forKey: Settings.key)
             if !s.armed { tone.stop() }
+            if s.deviceAlert != oldValue.deviceAlert { updateDeviceTimer() }
             if s.replaceSystemIcon != oldValue.replaceSystemIcon {
                 if s.replaceSystemIcon {
                     let moved = SystemBattery.takePosition(remembering: defaults)
@@ -142,6 +164,7 @@ struct History: Codable, Equatable {
     @Published var setupLater = false                           // "Later" on the setup card, for this launch
     @Published private(set) var aiStatus = AppleIntelligence.status
     @Published private(set) var aiNudgeDismissed: Bool          // "Not now" on the Apple Intelligence line, remembered
+    @Published private(set) var devices: [AccessoryBattery.Device] = []   // connected accessories with a battery level
     /// The helper is there but from another version: a signed update, or the setup card.
     var helperStale: Bool { !helperReady && PowerMode.helperInstalled }
     var interactive = true                                      // false = never raise the helper's admin prompt (harness, selftest, --simulate)
@@ -172,8 +195,11 @@ struct History: Codable, Equatable {
     private var smartUserChanged = false
     private var cappedFrom: Float?
     private var travelPrevious: Int?
+    private var deviceAlerts = DeviceAlerts()
+    private var deviceTimer: Timer?
     static let careWindowLength: TimeInterval = 5 * 60
     static let travelMax: TimeInterval = 24 * 3600
+    static let devicePoll: TimeInterval = 10 * 60   // accessory batteries move slowly; a light poll for the low-battery alert
 
     init(source: BatterySource, defaults: UserDefaults = .standard, historyURL: URL = History.url, hardware: Hardware = RealHardware()) {
         self.source = source
@@ -216,7 +242,7 @@ struct History: Codable, Equatable {
     /// --shots: sample state for the panel — no readings, no observers, nothing on the Mac touched.
     init(shots s: Settings, reading r: Reading, forecast: Forecast?, phase: Alerts.Phase = .clear, history: History = History(), helperReady: Bool = true,
          aiStatus: AppleIntelligence.Status = .available, welcome: Bool = false, tips: [Tip] = [], ranking: Ranking = Ranking(),
-         chargeLimit: ChargeLimit.State? = nil, power: PowerMode.State = PowerMode.State(), defaults: UserDefaults, source: BatterySource) {
+         chargeLimit: ChargeLimit.State? = nil, power: PowerMode.State = PowerMode.State(), devices: [AccessoryBattery.Device] = [], defaults: UserDefaults, source: BatterySource) {
         self.source = source
         self.defaults = defaults
         historyURL = FileManager.default.temporaryDirectory.appendingPathComponent("juiceleft-shots-history.json")
@@ -233,6 +259,7 @@ struct History: Codable, Equatable {
         self.tips = tips
         self.chargeLimit = chargeLimit
         self.power = power
+        self.devices = devices
         if let forecast { _ = steady.update(forecast.minutes) }
         energy.show(sample: ranking)
         insight.update(facts, ai: false)
@@ -257,6 +284,7 @@ struct History: Codable, Equatable {
             }
         }
         source.start()
+        updateDeviceTimer()
     }
 
     // MARK: User actions
@@ -276,6 +304,20 @@ struct History: Codable, Equatable {
     }
 
     func testTone() { tone.play(s.tone, volume: s.volume) }
+
+    /// A validated `juiceleft://` action, from Shortcuts or a script. Each maps onto a normal user action, with the
+    /// same guards (Save Battery only on battery, energy modes only with the helper, and so on).
+    func handle(_ action: URLAction) {
+        log?("url action \(action)")
+        switch action {
+        case .saveBattery(true): saveBattery()
+        case .saveBattery(false): undoSaveBattery()
+        case .setMode(let mode): setPowerMode(mode)
+        case .topUp: fullForTravel()
+        case .setArmed(let on): if s.armed != on { s.armed = on }
+        case .snooze: snooze()
+        }
+    }
 
     func dismissWelcome() { welcome = false }
 
@@ -406,7 +448,48 @@ struct History: Codable, Equatable {
         refreshChargeLimit()
     }
 
+    // MARK: Accessories
+
+    /// Re-reads the connected accessories' batteries (off the main thread) and, if the alert is on, warns about any
+    /// that just dropped low. A read only — never touched under --simulate or the harness.
+    func refreshDevices() {
+        guard interactive else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let list = AccessoryBattery.read()
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.applyDevices(list) } }
+        }
+    }
+
+    func applyDevices(_ list: [AccessoryBattery.Device]) {
+        if list != devices { devices = list }
+        guard s.deviceAlert else { return }
+        for d in deviceAlerts.due(list, level: s.deviceAlertAt) {
+            notify(id: "device-\(d.id)", title: "\(d.name) battery low: \(d.percent)%", body: "Charge it or change its battery soon.")
+        }
+    }
+
+    /// The slow background poll runs only while the accessory alert is on; the panel refreshes on its own besides.
+    private func updateDeviceTimer() {
+        if s.deviceAlert, deviceTimer == nil, interactive {
+            refreshDevices()
+            let t = Timer(timeInterval: Self.devicePoll, repeats: true) { _ in MainActor.assumeIsolated { self.refreshDevices() } }
+            t.tolerance = 60
+            RunLoop.main.add(t, forMode: .common)
+            deviceTimer = t
+        } else if !s.deviceAlert, deviceTimer != nil {
+            deviceTimer?.invalidate()
+            deviceTimer = nil
+            deviceAlerts = DeviceAlerts()
+        }
+    }
+
     // MARK: Care
+
+    /// A quiet word when the charger in use is too weak to charge at full speed.
+    var chargerAdvice: String? {
+        guard let r = reading else { return nil }
+        return ChargerAdvice.slowLine(onAC: r.onAC, charging: r.charging, watts: r.adapterWatts)
+    }
 
     var careFacts: CareFacts {
         var f = CareFacts()
@@ -492,9 +575,10 @@ struct History: Codable, Equatable {
         insight.retryAI(ai: s.insight)
         refreshPower()
         refreshChargeLimit()
+        refreshDevices()
         refreshTips()
         energy.start()
-        let timer = Timer(timeInterval: 60, repeats: true) { _ in MainActor.assumeIsolated { self.refreshPower() } }
+        let timer = Timer(timeInterval: 60, repeats: true) { _ in MainActor.assumeIsolated { self.refreshPower(); self.refreshDevices() } }
         RunLoop.main.add(timer, forMode: .common)
         powerTimer = timer
     }
@@ -601,8 +685,9 @@ struct History: Codable, Equatable {
             notify(id: "full", title: "Fully charged", body: "You can unplug.")
         }
         let minutes = forecast.map { steady.update($0.minutes) }
+        let wattsText = s.menuBarWatts ? r.batteryWatts.flatMap { abs($0) >= 0.5 ? Format.signedWatts($0) : nil } : nil
         let parts = Self.menuParts(squeezed && s.menuBar == .words ? .compact : s.menuBar, percent: r.percent, onAC: r.onAC, full: r.full,
-                                   charging: r.charging, minutes: minutes)
+                                   charging: r.charging, minutes: minutes, wattsText: wattsText)
         icon.show(MenuIcon.Frame(level: r.percent, plugged: r.onAC, armed: s.armed, percent: parts.percent, trailing: parts.trailing), phase: phase)
         care(r)
         light.update(enabled: s.light, onAC: r.onAC, charging: r.charging && !r.full, percent: r.percent, alertAt: s.alertAt,
@@ -669,7 +754,8 @@ struct History: Codable, Equatable {
         if powerTimer != nil { refreshPower() }
         guard s.plugNotices else { return }
         if r.onAC {
-            notify(id: "plug", title: "Charger connected", body: [r.adapterName, r.adapterWatts.map { "\($0) W" }].compactMap { $0 }.joined(separator: " · "))
+            let charger = [r.adapterName, r.adapterWatts.map { "\($0) W" }].compactMap { $0 }.joined(separator: " · ")
+            notify(id: "plug", title: "Charger connected", body: [charger.isEmpty ? nil : charger, chargerAdvice].compactMap { $0 }.joined(separator: " · "))
         } else {
             notify(id: "plug", title: "On battery: \(r.percent)%", body: forecastLine)
         }
@@ -718,18 +804,20 @@ struct History: Codable, Equatable {
     /// The text either side of the glyph, per the display setting: Apple's "84%" in front, and after it the time —
     /// spelled out ("2 Hours 10 Min Remaining", "45 Min Until Full"), or compact ("2:10", "Full 45m"); "Estimating…"
     /// (or "…") until there is a forecast; nothing at all when the battery is full. Pure, so --selftest can check it.
-    nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?)
+    nonisolated static func menuParts(_ style: Settings.MenuBar, percent: Int, onAC: Bool, full: Bool, charging: Bool, minutes: Int?, wattsText: String? = nil)
         -> (percent: String?, trailing: String?) {
         let pct = "\(percent)%"
+        var trailing: String?
         switch style {
-        case .icon: return (nil, nil)
-        case .percent: return (pct, nil)
+        case .icon: return (nil, nil)   // the battery alone, whatever else is set
+        case .percent: break
         case .compact, .words:
-            if onAC && (full || !charging) { return (pct, nil) }
-            guard let minutes else { return (pct, style == .words ? "Estimating…" : "…") }
-            let time = style == .words ? Format.words(minutes, charging: onAC) : onAC ? "Full \(Format.compact(minutes))" : Format.compact(minutes)
-            return (pct, time)
+            if onAC && (full || !charging) { break }
+            else if let minutes { trailing = style == .words ? Format.words(minutes, charging: onAC) : onAC ? "Full \(Format.compact(minutes))" : Format.compact(minutes) }
+            else { trailing = style == .words ? "Estimating…" : "…" }
         }
+        if let wattsText { trailing = [trailing, wattsText].compactMap { $0 }.joined(separator: " · ") }
+        return (pct, trailing)
     }
 
     /// What VoiceOver reads for the menu-bar item: the whole story.
